@@ -17,10 +17,7 @@ publisher:
   url: http://mohcc.org.zw
   # email: test@example.org
 
-dependencies:
-  zw.fhir.ig.core:
-    id: lab
-    version: current
+dependencies: {}
 
 
 
@@ -31,41 +28,14 @@ pages:
     title: Downloads
   about.md:
     title: About
-  
 
 
 menu:
-  Home: 
+  Home:
     Summary: index.html
-    # Changes: changes.html
-    # Dependencies: dependencies.html
-    # References: references.html
-    # Adapting Guidelines for Country use: adapting.html
-  # Business Requirements: 
-  #   Concepts: concepts.html
-  #   Generic Personas: personas.html
-  #   User Scenarios: scenarios.html
-  #   Business Processes: business-processes.html
-  #   Data Dictionary: dictionary.html
-  #   Decision-support Logic: decision-logic.html
-  #   Indicator and Performance Metrics: indicators.html
-  #   Functional Requirements: functional-requirements.html
-  #   Non-functional Requirements: non-functional-requirements.html
-  # Data Models and Exchange:
-  #   System Actors: system-actors.html
-  #   Sequence Diagrams: sequence-diagrams.html
-  #   Transactions: transactions.html
-  #   Indicators and Measures: indicators-measures.html
-  #   Codings: codings.html
-#
+  Artifacts: artifacts.html
   Deployment:
-  #   Security and Privacy Considerations: security-privacy.html
-  #   Testing: testing.html
-  #   Test Data: test-data.html
-  #   Reference Implementations: reference-implementations.html
-  #   Trust Domains: trust_domain.html
     Downloads: downloads.html
-    Artifacts: artifacts.html
   About: about.html
     
 # ╭───────────────────────────Less Common Implementation Guide Properties──────────────────────────╮
