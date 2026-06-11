@@ -1,9 +1,9 @@
 // ─── Patient ─────────────────────────────────────────────────────────────────
 
-// NOTE: Parent should become ZimPatient from the Zimbabwe core IG (zw.fhir.ig.core)
-// once that package is published/resolvable. Using base Patient until then.
+// Parent ZimPatient comes from the Zimbabwe core IG (zw.fhir.ig.core),
+// published at https://mohcc.github.io/fhir-zw-core-ig/
 Profile: ZWLabPatient
-Parent: Patient
+Parent: ZimPatient
 Id: zw-lab-patient
 Title: "ZW Lab Patient"
 Description: "Patient demographics exchanged in the Zimbabwe lab ordering workflow (ZW.LAB.A1 DE1–DE9)."

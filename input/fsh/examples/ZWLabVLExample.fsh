@@ -48,6 +48,9 @@ Usage: #example
 * name[=].family = "Moyo"
 * birthDate = "1988-04-15"
 * gender = #female
+* maritalStatus.coding[+].system = "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus"
+* maritalStatus.coding[=].code = #M
+* maritalStatus.coding[=].display = "Married"
 
 
 // ─── Specimen ────────────────────────────────────────────────────────────────

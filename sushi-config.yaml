@@ -17,7 +17,8 @@ publisher:
   url: http://mohcc.org.zw
   # email: test@example.org
 
-dependencies: {}
+dependencies:
+  zw.fhir.ig.core: 0.1.0
 
 
 
