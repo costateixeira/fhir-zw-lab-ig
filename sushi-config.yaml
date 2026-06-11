@@ -19,7 +19,7 @@ publisher:
 
 dependencies:
   zw.fhir.ig.core:
-    id: lab
+    id: core
     version: current
 
 
