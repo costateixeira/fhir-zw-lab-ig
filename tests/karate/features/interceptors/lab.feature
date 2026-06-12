@@ -1,3 +1,4 @@
+@ignore
 Feature: Lab system interceptor - order consumer + report submitter
 
   Waits for a lab-system client (point it at this server). It does not store anything; it intercepts and:
@@ -12,9 +13,13 @@ Feature: Lab system interceptor - order consumer + report submitter
     * def resultProfile = 'http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-diagnostic-report'
 
   # Lab consumes orders, correctly scoped to a patient -> forward to the repository
+  # (explicit forward: karate.proceed() drops the response body in karate 2.x mock mode)
   Scenario: methodIs('get') && pathMatches('/ServiceRequest') && (requestParams.subject != null || requestParams.patient != null)
     * karate.log('>> Lab order query (ok):', requestUri)
-    * karate.proceed(target)
+    Given url target
+    And path 'ServiceRequest'
+    And params requestParams
+    When method get
 
   # Lab consumes orders WITHOUT a patient scope -> reject as a malformed query
   Scenario: methodIs('get') && pathMatches('/ServiceRequest')

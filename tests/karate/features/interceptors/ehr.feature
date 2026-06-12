@@ -1,3 +1,4 @@
+@ignore
 Feature: EHR interceptor - order placer + results consumer
 
   Waits for an EHR client (point it at this server). It does not store anything; it intercepts and:
@@ -22,9 +23,13 @@ Feature: EHR interceptor - order placer + results consumer
     When method post
 
   # EHR consumes results, correctly scoped to a patient -> forward to the repository
+  # (explicit forward: karate.proceed() drops the response body in karate 2.x mock mode)
   Scenario: methodIs('get') && pathMatches('/DiagnosticReport') && (requestParams.subject != null || requestParams.patient != null)
     * karate.log('>> EHR result query (ok):', requestUri)
-    * karate.proceed(target)
+    Given url target
+    And path 'DiagnosticReport'
+    And params requestParams
+    When method get
 
   # EHR consumes results WITHOUT a patient scope -> reject as a malformed query
   Scenario: methodIs('get') && pathMatches('/DiagnosticReport')
