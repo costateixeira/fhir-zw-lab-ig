@@ -41,17 +41,37 @@ if [ ! -f "$JAR" ]; then
   curl -fL -o "$JAR" "https://github.com/karatelabs/karate/releases/download/v${KARATE_VERSION}/karate-${KARATE_VERSION}.jar"
 fi
 
-# Always exclude workshop placeholders and scenarios that need server-side
-# write validation (not yet enabled on the sandbox).
-TAGS=(-t "~@workshop" -t "~@pending-validation")
+# Workshop placeholders are always excluded. With no arguments we also skip
+# the write-validation scenarios (they need a validating server, e.g. the ZW
+# sandbox) and the auditor (needs AUDIT_PATIENT_IDENTIFIER). Passing tags
+# explicitly overrides those defaults, e.g.: ./run-tests.sh @pending-validation
+TAGS=(-t "~@workshop")
 if [ $# -gt 0 ]; then
   for t in "$@"; do TAGS+=(-t "$t"); done
 else
-  # the auditor needs AUDIT_PATIENT_IDENTIFIER; only run it when asked for
-  TAGS+=(-t "~@auditor")
+  TAGS+=(-t "~@pending-validation" -t "~@auditor")
 fi
 
-java -jar "$JAR" run "${TAGS[@]}" -e "${KARATE_ENV:-local}" -g . features/
+RUN_EXIT=0
+java -jar "$JAR" run "${TAGS[@]}" -e "${KARATE_ENV:-local}" -g . features/ || RUN_EXIT=$?
+
+# Archive every run under target/runs/<timestamp>-<env>/ so history survives
+# reruns; target/karate-reports/ keeps pointing at the latest run.
+RUN_ID="$(date +%Y%m%d-%H%M%S)-${KARATE_ENV:-local}"
+ARCHIVE="target/runs/$RUN_ID"
+if [ -d target/karate-reports ]; then
+  mkdir -p "$ARCHIVE"
+  cp -R target/karate-reports "$ARCHIVE/"
+  {
+    echo "date:    $(date -Iseconds)"
+    echo "env:     ${KARATE_ENV:-local}"
+    echo "shr_url: ${SHR_URL:-per karate-config env}"
+    echo "tags:    ${TAGS[*]}"
+    echo "exit:    $RUN_EXIT"
+  } > "$ARCHIVE/run-info.txt"
+fi
 
 echo
-echo "HTML report: $(pwd)/target/karate-reports/karate-summary.html"
+echo "HTML report (latest): $(pwd)/target/karate-reports/karate-summary.html"
+echo "Archived run:         $(pwd)/$ARCHIVE/"
+exit $RUN_EXIT

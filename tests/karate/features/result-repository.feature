@@ -41,8 +41,16 @@ Feature: Lab Result Repository — stores and serves result reports
     And match doc.entry[0].resource.resourceType == 'Composition'
     And match doc.entry[0].resource.attester[0].mode == 'legal'
 
-  @workshop @pending-validation
-  Scenario: TODO (workshop) — the repository rejects a non-conformant report document
-    # Requires validation-on-write on the sandbox.
-    # Steps: POST a report bundle stripped of its Composition to /Bundle and
-    # expect 4xx + OperationOutcome.
+  @pending-validation
+  Scenario: The repository rejects a non-conformant report document (write validation)
+    # result-push-02 — needs validation-on-write on the server (live on the ZW
+    # sandbox). Stripping the Composition violates both the document rules
+    # (first entry must be a Composition) and the ZWLabReportBundle profile.
+    * def doc = read('../data/report-bundle.json')
+    * doc.entry = doc.entry.slice(1)
+    Given path 'Bundle'
+    And request doc
+    When method post
+    Then assert responseStatus >= 400 && responseStatus < 500
+    And match response.resourceType == 'OperationOutcome'
+    And match response.issue[*].severity contains 'error'

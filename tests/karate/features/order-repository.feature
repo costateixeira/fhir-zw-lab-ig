@@ -41,10 +41,15 @@ Feature: Lab Order Repository — stores and serves submitted orders
     * def entries = response.entry || []
     And match entries == '#[0]'
 
-  @workshop @pending-validation
-  Scenario: TODO (workshop) — the repository rejects a non-conformant order bundle
-    # Requires validation-on-write on the sandbox (order-push-03).
-    # Steps: POST data/order-bundle-invalid.json, expect 4xx + OperationOutcome.
+  @pending-validation
+  Scenario: The repository rejects a non-conformant order bundle (write validation)
+    # order-push-03 — needs validation-on-write on the server (live on the ZW sandbox)
+    * def order = read('../data/order-bundle-invalid.json')
+    Given request order
+    When method post
+    Then assert responseStatus >= 400 && responseStatus < 500
+    And match response.resourceType == 'OperationOutcome'
+    And match response.issue[*].severity contains 'error'
 
   @workshop
   Scenario: TODO (workshop) — orders are searchable by receiving laboratory

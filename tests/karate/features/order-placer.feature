@@ -41,11 +41,16 @@ Feature: Lab Order Placer — pushes laboratory orders to the Lab Order Reposito
     And match response.resourceType == 'OperationOutcome'
     And match response.issue[*].severity contains 'error'
 
-  @workshop @pending-validation
-  Scenario: TODO (workshop) — a non-conformant order is rejected by the repository
-    # Requires validation-on-write enabled on the sandbox (order-push-03).
-    # Steps: POST data/order-bundle-invalid.json to the server root and expect
-    # an HTTP 4xx response whose body is an OperationOutcome.
+  @pending-validation
+  Scenario: A non-conformant order is rejected by the repository (write validation)
+    # order-push-03 — needs validation-on-write on the server (live on the ZW
+    # sandbox; the permissive local default accepts everything, hence the tag).
+    * def order = read('../data/order-bundle-invalid.json')
+    Given request order
+    When method post
+    Then assert responseStatus >= 400 && responseStatus < 500
+    And match response.resourceType == 'OperationOutcome'
+    And match response.issue[*].severity contains 'error'
 
   @workshop
   Scenario: TODO (workshop) — resubmitting the same order does not create duplicates
