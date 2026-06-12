@@ -52,6 +52,23 @@ cleanup() {
   FWD=$(rg -c 'ZWPROXY\|[^|]*\|.*\|forwarded' "$SESSION/proxy.log" 2>/dev/null || echo 0)
   echo "session summary:  ✓ ${PASS} conformant   ✗ ${FAIL} with findings   → ${FWD} passed through"
 
+  # per-request verdicts: table for the terminal, JSON artifact for the session folder
+  VERDICTS=$(rg 'ZWPROXY\|' "$SESSION/proxy.log" 2>/dev/null | sed -E 's/^([0-9:.]+) .*ZWPROXY\|/\1|/')
+  if [ -n "$VERDICTS" ]; then
+    echo
+    echo "── per-request verdicts ──"
+    printf '%s\n' "$VERDICTS" | awk -F'|' '
+      BEGIN { printf "  %-13s %-5s %-30s %s\n", "time", "actn", "subject", "result" }
+      { printf "  %-13s %-5s %-30s %s\n", $1, $2, $3, $4 }'
+    printf '%s\n' "$VERDICTS" | awk -F'|' '
+      BEGIN { print "["; sep="" }
+      { gsub(/"/, "\\\"")
+        printf "%s  {\"time\":\"%s\",\"action\":\"%s\",\"subject\":\"%s\",\"result\":\"%s\"}", sep, $1, $2, $3, $4
+        sep=",\n" }
+      END { print "\n]" }' > "$SESSION/verdicts.json"
+    echo "  (saved as JSON: $SESSION/verdicts.json)"
+  fi
+
   PATIENTS_FILE=""
   for f in target/session-patients.txt session-patients.txt; do
     [ -s "$f" ] && PATIENTS_FILE="$f" && break
