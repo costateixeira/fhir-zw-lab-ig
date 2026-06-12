@@ -25,5 +25,14 @@
     }
   ],
   "birthDate": "1990-01-15",
-  "gender": "female"
+  "gender": "female",
+  "maritalStatus": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+        "code": "U",
+        "display": "unmarried"
+      }
+    ]
+  }
 }

@@ -8,10 +8,6 @@
   "type": "transaction",
   "entry": [
     {
-      "request": {
-        "method": "POST",
-        "url": "Task"
-      },
       "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0001",
       "resource": {
         "resourceType": "Task",
@@ -87,13 +83,13 @@
           ]
         },
         "authoredOn": "2024-03-15T08:00:00+02:00"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Task"
       }
     },
     {
-      "request": {
-        "method": "POST",
-        "url": "ServiceRequest"
-      },
       "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0002",
       "resource": {
         "resourceType": "ServiceRequest",
@@ -129,13 +125,13 @@
           }
         ],
         "authoredOn": "2024-03-15T08:00:00+02:00"
+      },
+      "request": {
+        "method": "POST",
+        "url": "ServiceRequest"
       }
     },
     {
-      "request": {
-        "method": "POST",
-        "url": "Patient"
-      },
       "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003",
       "resource": {
         "resourceType": "Patient",
@@ -169,13 +165,13 @@
             }
           ]
         }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Patient"
       }
     },
     {
-      "request": {
-        "method": "POST",
-        "url": "Specimen"
-      },
       "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0004",
       "resource": {
         "resourceType": "Specimen",
@@ -206,6 +202,10 @@
           "collectedDateTime": "2024-03-15T08:30:00+02:00"
         },
         "status": "available"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Specimen"
       }
     },
     {
