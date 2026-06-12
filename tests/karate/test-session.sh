@@ -32,6 +32,8 @@ echo " ZW Lab conformance session — actor: ${ACTOR}"
 echo " Point your system's FHIR base URL at:  http://${LAN_IP}:${PORT}"
 echo " Requests flow through to:              ${TARGET}"
 echo " Every push is scored against the ZW profiles on the way."
+echo " No real system handy? Open simulator/${ACTOR}-simulator.html"
+echo " and set its base to:                   http://localhost:${PORT}"
 echo " Stop with Ctrl+C to get your audit and summary."
 echo "──────────────────────────────────────────────────────────────"
 

@@ -142,15 +142,23 @@ the suite can run repeatedly against a shared server without collisions.
 3. Remove the `@workshop` tag and run the feature:
    `./run-tests.sh @lab-order-fulfiller`
 
-## EHR simulator (no system? no problem)
+## Simulators (no system? no problem)
 
-`simulator/ehr-simulator.html` is a zero-dependency page — open it straight
-from disk in Chrome. Pick a payload (valid / invalid / the real Impilo
-sample / your own), click **Submit order**, and it POSTs to the proxy with
-fresh identifiers per submit; the conformance verdict and full response are
-shown inline. The pull buttons demo patient-scoped vs refused queries.
+`simulator/` holds one zero-dependency page per actor — open them straight
+from disk in Chrome. Pick a payload, click **Submit**, and the page POSTs to
+the proxy with fresh identifiers per submit; the conformance verdict and full
+response are shown inline. The pull buttons demo patient-scoped vs refused
+queries.
 
-Typical demo: `./test-session.sh ehr` in one terminal, the simulator in the
-browser — every click appears in the session's live feed and counts toward
-the end-of-session audit. Regenerate the page after changing payload data:
-`scripts/build-simulator.sh`.
+- `ehr-simulator.html` plays the Lab Order Placer / Result Consumer:
+  submits order bundles (valid / invalid / the real Impilo sample / your
+  own) and pulls DiagnosticReports.
+- `lab-simulator.html` plays the Order Fulfiller / Result Provider:
+  submits report documents (valid / invalid / your own) and pulls
+  ServiceRequest orders.
+
+Typical demo: `./test-session.sh ehr` (or `./test-session.sh lab 8081`) in
+one terminal, the matching simulator in the browser — every click appears in
+the session's live feed and counts toward the end-of-session audit. Both
+pages are generated from the same template; regenerate after changing
+payload data: `scripts/build-simulator.sh`.

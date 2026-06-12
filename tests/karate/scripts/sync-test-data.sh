@@ -126,6 +126,17 @@ for e in report.get('entry', []):
         strip_loinc_codings(e['resource'])
 save('report-bundle.json', report)
 
+# Invalid variant: DiagnosticReport without a test code, Patient without the
+# required EHR identifier — must fail ZWLabReportBundle profile validation.
+bad_report = copy.deepcopy(report)
+for e in bad_report['entry']:
+    r = e['resource']
+    if r['resourceType'] == 'DiagnosticReport':
+        r.pop('code', None)
+    if r['resourceType'] == 'Patient':
+        r.pop('identifier', None)
+save('report-bundle-invalid.json', bad_report)
+
 # ── Standalone result resources (provider creates these against live ids) ────
 obs = load('Observation-example-zw-vl-observation.json')
 for k in ('id', 'text', 'subject', 'basedOn', 'specimen'):

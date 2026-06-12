@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>ZW Lab — Lab (LIMS) Simulator</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; max-width: 1000px;
+         margin: 24px auto; padding: 0 16px; line-height: 1.45; }
+  h1 { font-size: 20px; } h1 small { font-weight: normal; color: #777; font-size: 13px; }
+  fieldset { border: 1px solid #bbb4; border-radius: 8px; margin-bottom: 14px; padding: 10px 14px; }
+  legend { font-size: 12px; color: #888; padding: 0 6px; }
+  label { font-size: 13px; margin-right: 14px; }
+  input[type=text] { width: 320px; font-family: ui-monospace, monospace; font-size: 13px; padding: 4px 6px; }
+  select { font-size: 13px; padding: 3px; }
+  textarea { width: 100%; height: 260px; font-family: ui-monospace, monospace; font-size: 12px;
+             border: 1px solid #bbb4; border-radius: 6px; padding: 8px; box-sizing: border-box; }
+  button { font-size: 14px; padding: 7px 16px; border-radius: 6px; border: 1px solid #888a;
+           cursor: pointer; margin-right: 8px; background: transparent; }
+  button.primary { background: #1f6feb; color: white; border-color: #1f6feb; }
+  #verdict { font-size: 14px; font-weight: 600; margin: 12px 0 6px; }
+  #verdict.pass { color: #1a7f37; } #verdict.fail { color: #cf222e; } #verdict.info { color: #777; }
+  pre#out { border: 1px solid #bbb4; border-radius: 6px; padding: 10px; font-size: 11.5px;
+            max-height: 420px; overflow: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>ZW Lab — Lab (LIMS) Simulator <small>plays the Order Fulfiller / Result Provider</small></h1>
+
+<fieldset>
+  <legend>where to send</legend>
+  <label>Proxy / server base <input type="text" id="base" value="http://localhost:8081"/></label>
+  <label><input type="checkbox" id="fresh" checked/> fresh identifiers per submit</label>
+</fieldset>
+
+<fieldset>
+  <legend>payload</legend>
+  <label>Choose:
+    <select id="pick" onchange="pickPayload()"></select>
+  </label>
+  <textarea id="payload" spellcheck="false"></textarea>
+</fieldset>
+
+<div id="actions"></div>
+
+<div id="verdict" class="info">no request sent yet</div>
+<pre id="out"></pre>
+
+<script>
+// Everything actor-specific is data; the code below is identical across the
+// generated simulator pages.
+const CFG = {
+  "actor": "lab",
+  "payloads": [
+    {
+      "key": "valid",
+      "label": "Valid report document (from the IG example)"
+    },
+    {
+      "key": "invalid",
+      "label": "Invalid report document (missing code + identifier)"
+    }
+  ],
+  "submit": {
+    "label": "Submit report (POST /Bundle)",
+    "path": "/Bundle"
+  },
+  "pulls": [
+    {
+      "label": "Pull orders (patient-scoped)",
+      "path": "/ServiceRequest",
+      "params": {
+        "patient.identifier": "http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id|EHR-ZW-00123"
+      }
+    },
+    {
+      "label": "Pull orders (unscoped — should be refused)",
+      "path": "/ServiceRequest"
+    }
+  ],
+  "freshen": [
+    [
+      "EHR-ZW-00123",
+      "EHR-SIM-"
+    ],
+    [
+      "ZW-SPEC-2024-00456",
+      "SPEC-SIM-"
+    ],
+    [
+      "ZW-LABDOC-2024-00456",
+      "LABDOC-SIM-"
+    ]
+  ]
+};
+const PAYLOADS = {
+  "valid": {
+    "resourceType": "Bundle",
+    "meta": {
+      "profile": [
+        "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-report-bundle"
+      ]
+    },
+    "type": "document",
+    "identifier": {
+      "system": "http://mohcc.gov.zw/fhir/lab/identifier/report-document",
+      "value": "ZW-LABDOC-2024-00456"
+    },
+    "timestamp": "2024-03-18T16:35:00+02:00",
+    "entry": [
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Composition/example-zw-vl-composition",
+        "resource": {
+          "resourceType": "Composition",
+          "id": "example-zw-vl-composition",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-report-composition"
+            ]
+          },
+          "type": {
+            "coding": [
+              {
+                "code": "11502-2",
+                "system": "http://loinc.org",
+                "display": "Laboratory report"
+              }
+            ]
+          },
+          "attester": [
+            {
+              "mode": "legal",
+              "time": "2024-03-18T16:30:00+02:00",
+              "party": {
+                "reference": "Organization/example-national-virology-lab"
+              }
+            }
+          ],
+          "section": [
+            {
+              "code": {
+                "coding": [
+                  {
+                    "code": "30954-2",
+                    "system": "http://loinc.org",
+                    "display": "Relevant diagnostic tests/laboratory data note"
+                  }
+                ]
+              },
+              "title": "Laboratory Results",
+              "entry": [
+                {
+                  "reference": "DiagnosticReport/example-zw-vl-diagnostic-report"
+                }
+              ]
+            }
+          ],
+          "status": "final",
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "date": "2024-03-18T16:30:00+02:00",
+          "author": [
+            {
+              "reference": "Organization/example-national-virology-lab"
+            }
+          ],
+          "title": "Laboratory Result Report — Viral Load Plasma",
+          "custodian": {
+            "reference": "Organization/example-national-virology-lab"
+          }
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/DiagnosticReport/example-zw-vl-diagnostic-report",
+        "resource": {
+          "resourceType": "DiagnosticReport",
+          "id": "example-zw-vl-diagnostic-report",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-diagnostic-report"
+            ]
+          },
+          "extension": [
+            {
+              "url": "http://mohcc.gov.zw/fhir/lab/StructureDefinition/report-review-state",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-report-review-state",
+                    "code": "verified",
+                    "display": "Verified"
+                  }
+                ]
+              }
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
+                  "code": "MB",
+                  "display": "Microbiology"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-lab-tests",
+                "code": "LTT0013",
+                "display": "Viral Load Plasma"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "basedOn": [
+            {
+              "reference": "ServiceRequest/example-zw-service-request-vl"
+            }
+          ],
+          "specimen": [
+            {
+              "reference": "Specimen/example-zw-specimen-plasma"
+            }
+          ],
+          "effectiveDateTime": "2024-03-18T14:00:00+02:00",
+          "issued": "2024-03-18T16:30:00+02:00",
+          "performer": [
+            {
+              "reference": "Organization/example-national-virology-lab"
+            }
+          ],
+          "resultsInterpreter": [
+            {
+              "reference": "Organization/example-national-virology-lab"
+            }
+          ],
+          "result": [
+            {
+              "reference": "Observation/example-zw-vl-observation"
+            }
+          ]
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Patient/example-zw-lab-patient",
+        "resource": {
+          "resourceType": "Patient",
+          "id": "example-zw-lab-patient",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-patient"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id",
+              "value": "EHR-ZW-00123"
+            },
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/identifier/art-number",
+              "value": "HRE/2019/005678"
+            }
+          ],
+          "extension": [
+            {
+              "url": "http://mohcc.gov.zw/fhir/lab/StructureDefinition/date-of-birth-estimated",
+              "valueBoolean": false
+            }
+          ],
+          "name": [
+            {
+              "given": [
+                "Rutendo"
+              ],
+              "family": "Moyo"
+            }
+          ],
+          "birthDate": "1988-04-15",
+          "gender": "female",
+          "maritalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+                "code": "M",
+                "display": "Married"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Observation/example-zw-vl-observation",
+        "resource": {
+          "resourceType": "Observation",
+          "id": "example-zw-vl-observation",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-result-observation"
+            ]
+          },
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "laboratory"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-lab-tests",
+                "code": "LTT0013",
+                "display": "Viral Load Plasma"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "basedOn": [
+            {
+              "reference": "ServiceRequest/example-zw-service-request-vl"
+            }
+          ],
+          "specimen": {
+            "reference": "Specimen/example-zw-specimen-plasma"
+          },
+          "valueQuantity": {
+            "value": 48,
+            "unit": "copies/mL",
+            "system": "http://unitsofmeasure.org",
+            "code": "/mL"
+          },
+          "method": {
+            "text": "RT-PCR"
+          },
+          "effectiveDateTime": "2024-03-18T14:00:00+02:00"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Specimen/example-zw-specimen-plasma",
+        "resource": {
+          "resourceType": "Specimen",
+          "id": "example-zw-specimen-plasma",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-specimen"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/identifier/client-sample-id",
+              "value": "ZW-SPEC-2024-00456"
+            }
+          ],
+          "type": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-sample-types",
+                "code": "LST006",
+                "display": "Blood Plasma"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "collection": {
+            "collectedDateTime": "2024-03-15T08:30:00+02:00"
+          },
+          "status": "available"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/ServiceRequest/example-zw-service-request-vl",
+        "resource": {
+          "resourceType": "ServiceRequest",
+          "id": "example-zw-service-request-vl",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-service-request"
+            ]
+          },
+          "intent": "order",
+          "status": "active",
+          "code": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-lab-tests",
+                "code": "LTT0013",
+                "display": "Viral Load Plasma"
+              }
+            ]
+          },
+          "reasonCode": [
+            {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-reason-for-test",
+                  "code": "routine",
+                  "display": "Routine"
+                }
+              ]
+            }
+          ],
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "specimen": [
+            {
+              "reference": "Specimen/example-zw-specimen-plasma"
+            }
+          ],
+          "locationReference": [
+            {
+              "reference": "Location/example-order-facility"
+            }
+          ],
+          "authoredOn": "2024-03-15T08:00:00+02:00"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Organization/example-national-virology-lab",
+        "resource": {
+          "resourceType": "Organization",
+          "id": "example-national-virology-lab",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-laboratory"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-laboratories",
+              "value": "ZWLPAR001"
+            }
+          ],
+          "type": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+                  "code": "other",
+                  "display": "Other"
+                }
+              ],
+              "text": "Laboratory"
+            }
+          ],
+          "name": "National Virology Laboratory"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Location/example-order-facility",
+        "resource": {
+          "resourceType": "Location",
+          "id": "example-order-facility",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-facility"
+            ]
+          },
+          "name": "Harare City Health Clinic",
+          "status": "active"
+        }
+      }
+    ]
+  },
+  "invalid": {
+    "resourceType": "Bundle",
+    "meta": {
+      "profile": [
+        "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-report-bundle"
+      ]
+    },
+    "type": "document",
+    "identifier": {
+      "system": "http://mohcc.gov.zw/fhir/lab/identifier/report-document",
+      "value": "ZW-LABDOC-2024-00456"
+    },
+    "timestamp": "2024-03-18T16:35:00+02:00",
+    "entry": [
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Composition/example-zw-vl-composition",
+        "resource": {
+          "resourceType": "Composition",
+          "id": "example-zw-vl-composition",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-report-composition"
+            ]
+          },
+          "type": {
+            "coding": [
+              {
+                "code": "11502-2",
+                "system": "http://loinc.org",
+                "display": "Laboratory report"
+              }
+            ]
+          },
+          "attester": [
+            {
+              "mode": "legal",
+              "time": "2024-03-18T16:30:00+02:00",
+              "party": {
+                "reference": "Organization/example-national-virology-lab"
+              }
+            }
+          ],
+          "section": [
+            {
+              "code": {
+                "coding": [
+                  {
+                    "code": "30954-2",
+                    "system": "http://loinc.org",
+                    "display": "Relevant diagnostic tests/laboratory data note"
+                  }
+                ]
+              },
+              "title": "Laboratory Results",
+              "entry": [
+                {
+                  "reference": "DiagnosticReport/example-zw-vl-diagnostic-report"
+                }
+              ]
+            }
+          ],
+          "status": "final",
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "date": "2024-03-18T16:30:00+02:00",
+          "author": [
+            {
+              "reference": "Organization/example-national-virology-lab"
+            }
+          ],
+          "title": "Laboratory Result Report — Viral Load Plasma",
+          "custodian": {
+            "reference": "Organization/example-national-virology-lab"
+          }
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/DiagnosticReport/example-zw-vl-diagnostic-report",
+        "resource": {
+          "resourceType": "DiagnosticReport",
+          "id": "example-zw-vl-diagnostic-report",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-diagnostic-report"
+            ]
+          },
+          "extension": [
+            {
+              "url": "http://mohcc.gov.zw/fhir/lab/StructureDefinition/report-review-state",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-report-review-state",
+                    "code": "verified",
+                    "display": "Verified"
+                  }
+                ]
+              }
+            }
+          ],
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
+                  "code": "MB",
+                  "display": "Microbiology"
+                }
+              ]
+            }
+          ],
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "basedOn": [
+            {
+              "reference": "ServiceRequest/example-zw-service-request-vl"
+            }
+          ],
+          "specimen": [
+            {
+              "reference": "Specimen/example-zw-specimen-plasma"
+            }
+          ],
+          "effectiveDateTime": "2024-03-18T14:00:00+02:00",
+          "issued": "2024-03-18T16:30:00+02:00",
+          "performer": [
+            {
+              "reference": "Organization/example-national-virology-lab"
+            }
+          ],
+          "resultsInterpreter": [
+            {
+              "reference": "Organization/example-national-virology-lab"
+            }
+          ],
+          "result": [
+            {
+              "reference": "Observation/example-zw-vl-observation"
+            }
+          ]
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Patient/example-zw-lab-patient",
+        "resource": {
+          "resourceType": "Patient",
+          "id": "example-zw-lab-patient",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-patient"
+            ]
+          },
+          "extension": [
+            {
+              "url": "http://mohcc.gov.zw/fhir/lab/StructureDefinition/date-of-birth-estimated",
+              "valueBoolean": false
+            }
+          ],
+          "name": [
+            {
+              "given": [
+                "Rutendo"
+              ],
+              "family": "Moyo"
+            }
+          ],
+          "birthDate": "1988-04-15",
+          "gender": "female",
+          "maritalStatus": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+                "code": "M",
+                "display": "Married"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Observation/example-zw-vl-observation",
+        "resource": {
+          "resourceType": "Observation",
+          "id": "example-zw-vl-observation",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-result-observation"
+            ]
+          },
+          "status": "final",
+          "category": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                  "code": "laboratory"
+                }
+              ]
+            }
+          ],
+          "code": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-lab-tests",
+                "code": "LTT0013",
+                "display": "Viral Load Plasma"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "basedOn": [
+            {
+              "reference": "ServiceRequest/example-zw-service-request-vl"
+            }
+          ],
+          "specimen": {
+            "reference": "Specimen/example-zw-specimen-plasma"
+          },
+          "valueQuantity": {
+            "value": 48,
+            "unit": "copies/mL",
+            "system": "http://unitsofmeasure.org",
+            "code": "/mL"
+          },
+          "method": {
+            "text": "RT-PCR"
+          },
+          "effectiveDateTime": "2024-03-18T14:00:00+02:00"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Specimen/example-zw-specimen-plasma",
+        "resource": {
+          "resourceType": "Specimen",
+          "id": "example-zw-specimen-plasma",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-specimen"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/identifier/client-sample-id",
+              "value": "ZW-SPEC-2024-00456"
+            }
+          ],
+          "type": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-sample-types",
+                "code": "LST006",
+                "display": "Blood Plasma"
+              }
+            ]
+          },
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "collection": {
+            "collectedDateTime": "2024-03-15T08:30:00+02:00"
+          },
+          "status": "available"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/ServiceRequest/example-zw-service-request-vl",
+        "resource": {
+          "resourceType": "ServiceRequest",
+          "id": "example-zw-service-request-vl",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-service-request"
+            ]
+          },
+          "intent": "order",
+          "status": "active",
+          "code": {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-lab-tests",
+                "code": "LTT0013",
+                "display": "Viral Load Plasma"
+              }
+            ]
+          },
+          "reasonCode": [
+            {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-reason-for-test",
+                  "code": "routine",
+                  "display": "Routine"
+                }
+              ]
+            }
+          ],
+          "subject": {
+            "reference": "Patient/example-zw-lab-patient"
+          },
+          "specimen": [
+            {
+              "reference": "Specimen/example-zw-specimen-plasma"
+            }
+          ],
+          "locationReference": [
+            {
+              "reference": "Location/example-order-facility"
+            }
+          ],
+          "authoredOn": "2024-03-15T08:00:00+02:00"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Organization/example-national-virology-lab",
+        "resource": {
+          "resourceType": "Organization",
+          "id": "example-national-virology-lab",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-laboratory"
+            ]
+          },
+          "identifier": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-laboratories",
+              "value": "ZWLPAR001"
+            }
+          ],
+          "type": [
+            {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+                  "code": "other",
+                  "display": "Other"
+                }
+              ],
+              "text": "Laboratory"
+            }
+          ],
+          "name": "National Virology Laboratory"
+        }
+      },
+      {
+        "fullUrl": "http://mohcc.gov.zw/fhir/lab/Location/example-order-facility",
+        "resource": {
+          "resourceType": "Location",
+          "id": "example-order-facility",
+          "meta": {
+            "profile": [
+              "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-facility"
+            ]
+          },
+          "name": "Harare City Health Clinic",
+          "status": "active"
+        }
+      }
+    ]
+  }
+};
+
+const sel = document.getElementById('pick');
+CFG.payloads.forEach(p => sel.add(new Option(p.label, p.key)));
+sel.add(new Option('Custom (paste your own)', 'custom'));
+
+function pickPayload() {
+  const k = sel.value;
+  if (k !== 'custom') document.getElementById('payload').value = JSON.stringify(PAYLOADS[k], null, 2);
+}
+pickPayload();
+
+const bar = document.getElementById('actions');
+const submitBtn = document.createElement('button');
+submitBtn.className = 'primary';
+submitBtn.textContent = CFG.submit.label;
+submitBtn.onclick = submitPayload;
+bar.appendChild(submitBtn);
+CFG.pulls.forEach(p => {
+  const b = document.createElement('button');
+  b.textContent = p.label;
+  b.onclick = () => pull(p);
+  bar.appendChild(b);
+});
+
+function base() { return document.getElementById('base').value.replace(/\/+$/, ''); }
+
+function freshen(text) {
+  if (!document.getElementById('fresh').checked) return text;
+  const ts = Date.now();
+  CFG.freshen.forEach(([from, prefix]) => { text = text.replaceAll(from, prefix + ts); });
+  return text;
+}
+
+function show(kind, headline, body) {
+  const v = document.getElementById('verdict');
+  v.className = kind; v.textContent = headline;
+  document.getElementById('out').textContent = body;
+}
+
+async function send(method, url, bodyText) {
+  show('info', '… sending ' + method + ' ' + url, '');
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: bodyText ? { 'Content-Type': 'application/fhir+json' } : { 'Accept': 'application/fhir+json' },
+      body: bodyText || undefined
+    });
+    const verdict = res.headers.get('X-ZW-Validation');
+    const text = await res.text();
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    const ok = res.ok && (!verdict || verdict.startsWith('0 '));
+    const head = 'HTTP ' + res.status + (verdict ? '   ·   conformance: ' + verdict : '');
+    show(ok ? 'pass' : 'fail', (ok ? '✓ ' : '✗ ') + head, pretty);
+  } catch (e) {
+    show('fail', '✗ request failed — is the proxy running?', String(e));
+  }
+}
+
+function submitPayload() {
+  const text = freshen(document.getElementById('payload').value);
+  send('POST', base() + CFG.submit.path, text);
+}
+
+function pull(p) {
+  // URLSearchParams percent-encodes '|' etc. — raw pipes get dropped by the
+  // proxy's HTTP parser before scenario matching
+  const qs = new URLSearchParams(p.params || {}).toString();
+  send('GET', base() + p.path + (qs ? '?' + qs : ''));
+}
+</script>
+</body>
+</html>

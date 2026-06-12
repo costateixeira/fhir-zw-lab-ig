@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Generates simulator/ehr-simulator.html — a zero-dependency page (open it
-# straight from disk in any browser) that plays the EHR: pick a payload, click
-# Submit, and it POSTs to the conformance proxy / server you point it at.
-# Payloads are embedded from tests/karate/data/ so the page works from file://.
-# Re-run after changing the data files.
+# Generates simulator/ehr-simulator.html and simulator/lab-simulator.html —
+# zero-dependency pages (open them straight from disk in any browser) that
+# play one actor each: pick a payload, click Submit, and it POSTs to the
+# conformance proxy / server you point it at. Both pages are rendered from
+# the SAME template below; only the actor config (payloads, submit endpoint,
+# pull queries) differs. Payloads are embedded from tests/karate/data/ so the
+# pages work from file://. Re-run after changing the data files.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p simulator
@@ -13,19 +15,59 @@ import json
 
 def load(p):
     with open(p) as f:
-        return json.dumps(json.load(f), indent=2)
+        return json.load(f)
 
-payloads = {
-    'valid': load('data/order-bundle.json'),
-    'invalid': load('data/order-bundle-invalid.json'),
-    'impilo': load('data/impilo-order-sample.json'),
+# One entry per actor. The HTML/JS template is shared; everything that
+# differs between the EHR and the lab lives here.
+ACTORS = {
+    'ehr': {
+        'file': 'simulator/ehr-simulator.html',
+        'title': 'EHR Simulator',
+        'subtitle': 'plays the Lab Order Placer / Result Consumer',
+        'port': 8080,
+        'payloads': [
+            {'key': 'valid', 'label': 'Valid order bundle (from the IG example)',
+             'data': load('data/order-bundle.json')},
+            {'key': 'invalid', 'label': 'Invalid order bundle (missing code + identifier)',
+             'data': load('data/order-bundle-invalid.json')},
+            {'key': 'impilo', 'label': 'Real Impilo order sample',
+             'data': load('data/impilo-order-sample.json')},
+        ],
+        'submit': {'label': 'Submit order (POST bundle)', 'path': '/'},
+        'pulls': [
+            {'label': 'Pull results (patient-scoped)', 'path': '/DiagnosticReport',
+             'params': {'patient': 'Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683'}},
+            {'label': 'Pull results (unscoped — should be refused)', 'path': '/DiagnosticReport'},
+        ],
+        'freshen': [['EHR-ZW-00123', 'EHR-SIM-'], ['ZW-SPEC-2024-00456', 'SPEC-SIM-']],
+    },
+    'lab': {
+        'file': 'simulator/lab-simulator.html',
+        'title': 'Lab (LIMS) Simulator',
+        'subtitle': 'plays the Order Fulfiller / Result Provider',
+        'port': 8081,
+        'payloads': [
+            {'key': 'valid', 'label': 'Valid report document (from the IG example)',
+             'data': load('data/report-bundle.json')},
+            {'key': 'invalid', 'label': 'Invalid report document (missing code + identifier)',
+             'data': load('data/report-bundle-invalid.json')},
+        ],
+        'submit': {'label': 'Submit report (POST /Bundle)', 'path': '/Bundle'},
+        'pulls': [
+            {'label': 'Pull orders (patient-scoped)', 'path': '/ServiceRequest',
+             'params': {'patient.identifier': 'http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id|EHR-ZW-00123'}},
+            {'label': 'Pull orders (unscoped — should be refused)', 'path': '/ServiceRequest'},
+        ],
+        'freshen': [['EHR-ZW-00123', 'EHR-SIM-'], ['ZW-SPEC-2024-00456', 'SPEC-SIM-'],
+                    ['ZW-LABDOC-2024-00456', 'LABDOC-SIM-']],
+    },
 }
 
-html = """<!DOCTYPE html>
+TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
-<title>ZW Lab — EHR Simulator</title>
+<title>ZW Lab — __TITLE__</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; max-width: 1000px;
@@ -48,57 +90,63 @@ html = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<h1>ZW Lab — EHR Simulator <small>plays the Lab Order Placer / Result Consumer</small></h1>
+<h1>ZW Lab — __TITLE__ <small>__SUBTITLE__</small></h1>
 
 <fieldset>
   <legend>where to send</legend>
-  <label>Proxy / server base <input type="text" id="base" value="http://localhost:8080"/></label>
-  <label><input type="checkbox" id="fresh" checked/> fresh patient &amp; sample identifiers per submit</label>
+  <label>Proxy / server base <input type="text" id="base" value="http://localhost:__PORT__"/></label>
+  <label><input type="checkbox" id="fresh" checked/> fresh identifiers per submit</label>
 </fieldset>
 
 <fieldset>
   <legend>payload</legend>
   <label>Choose:
-    <select id="pick" onchange="pickPayload()">
-      <option value="valid">Valid order bundle (from the IG example)</option>
-      <option value="invalid">Invalid order bundle (missing code + identifier)</option>
-      <option value="impilo">Real Impilo order sample</option>
-      <option value="custom">Custom (paste your own)</option>
-    </select>
+    <select id="pick" onchange="pickPayload()"></select>
   </label>
   <textarea id="payload" spellcheck="false"></textarea>
 </fieldset>
 
-<div>
-  <button class="primary" onclick="submitOrder()">Submit order (POST bundle)</button>
-  <button onclick="pullScoped()">Pull results (patient-scoped)</button>
-  <button onclick="pullUnscoped()">Pull results (unscoped — should be refused)</button>
-</div>
+<div id="actions"></div>
 
 <div id="verdict" class="info">no request sent yet</div>
 <pre id="out"></pre>
 
 <script>
-const PAYLOADS = {
-  valid: __VALID__,
-  invalid: __INVALID__,
-  impilo: __IMPILO__
-};
+// Everything actor-specific is data; the code below is identical across the
+// generated simulator pages.
+const CFG = __CONFIG__;
+const PAYLOADS = __PAYLOADS__;
+
+const sel = document.getElementById('pick');
+CFG.payloads.forEach(p => sel.add(new Option(p.label, p.key)));
+sel.add(new Option('Custom (paste your own)', 'custom'));
 
 function pickPayload() {
-  const k = document.getElementById('pick').value;
+  const k = sel.value;
   if (k !== 'custom') document.getElementById('payload').value = JSON.stringify(PAYLOADS[k], null, 2);
 }
 pickPayload();
+
+const bar = document.getElementById('actions');
+const submitBtn = document.createElement('button');
+submitBtn.className = 'primary';
+submitBtn.textContent = CFG.submit.label;
+submitBtn.onclick = submitPayload;
+bar.appendChild(submitBtn);
+CFG.pulls.forEach(p => {
+  const b = document.createElement('button');
+  b.textContent = p.label;
+  b.onclick = () => pull(p);
+  bar.appendChild(b);
+});
 
 function base() { return document.getElementById('base').value.replace(/\\/+$/, ''); }
 
 function freshen(text) {
   if (!document.getElementById('fresh').checked) return text;
   const ts = Date.now();
-  return text
-    .replaceAll('EHR-ZW-00123', 'EHR-SIM-' + ts)
-    .replaceAll('ZW-SPEC-2024-00456', 'SPEC-SIM-' + ts);
+  CFG.freshen.forEach(([from, prefix]) => { text = text.replaceAll(from, prefix + ts); });
+  return text;
 }
 
 function show(kind, headline, body) {
@@ -127,23 +175,38 @@ async function send(method, url, bodyText) {
   }
 }
 
-function submitOrder() {
+function submitPayload() {
   const text = freshen(document.getElementById('payload').value);
-  send('POST', base() + '/', text);
+  send('POST', base() + CFG.submit.path, text);
 }
-function pullScoped() {
-  send('GET', base() + '/DiagnosticReport?patient=Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683');
-}
-function pullUnscoped() {
-  send('GET', base() + '/DiagnosticReport');
+
+function pull(p) {
+  // URLSearchParams percent-encodes '|' etc. — raw pipes get dropped by the
+  // proxy's HTTP parser before scenario matching
+  const qs = new URLSearchParams(p.params || {}).toString();
+  send('GET', base() + p.path + (qs ? '?' + qs : ''));
 }
 </script>
 </body>
 </html>
 """
 
-html = html.replace('__VALID__', payloads['valid']).replace('__INVALID__', payloads['invalid']).replace('__IMPILO__', payloads['impilo'])
-with open('simulator/ehr-simulator.html', 'w') as f:
-    f.write(html)
-print('simulator/ehr-simulator.html written')
+for actor, cfg in ACTORS.items():
+    config = {
+        'actor': actor,
+        'payloads': [{'key': p['key'], 'label': p['label']} for p in cfg['payloads']],
+        'submit': cfg['submit'],
+        'pulls': cfg['pulls'],
+        'freshen': cfg['freshen'],
+    }
+    payloads = {p['key']: p['data'] for p in cfg['payloads']}
+    html = (TEMPLATE
+            .replace('__TITLE__', cfg['title'])
+            .replace('__SUBTITLE__', cfg['subtitle'])
+            .replace('__PORT__', str(cfg['port']))
+            .replace('__CONFIG__', json.dumps(config, indent=2, ensure_ascii=False))
+            .replace('__PAYLOADS__', json.dumps(payloads, indent=2, ensure_ascii=False)))
+    with open(cfg['file'], 'w') as f:
+        f.write(html)
+    print(cfg['file'] + ' written')
 PY
