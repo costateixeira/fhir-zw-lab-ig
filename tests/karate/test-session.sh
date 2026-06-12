@@ -86,6 +86,60 @@ cleanup() {
     echo "(no patient identifiers seen in pushes — skipping the audit)"
   fi
 
+  # keep this session's audit report with the session — target/karate-reports
+  # is "latest run" and gets overwritten by any later test run
+  if [ -n "$PATIENTS_FILE" ] && [ -d target/karate-reports ]; then
+    cp -R target/karate-reports "$SESSION/audit-report"
+  fi
+
+  # browser dashboard: verdicts table side by side with the audit's Karate
+  # report (generated after the audit so the iframe has something to show)
+  if [ -n "$VERDICTS" ]; then
+    {
+      cat <<'HTML'
+<!doctype html><html><head><meta charset="utf-8"><title>ZW Lab session verdicts</title>
+<style>
+ body{font-family:-apple-system,'Segoe UI',sans-serif;margin:1.5rem;background:#fafafa;color:#222}
+ h1{font-size:1.2rem;margin-bottom:.2rem} h2{font-size:.95rem;color:#444;margin:.2rem 0 .6rem}
+ .meta{color:#666;margin-bottom:1rem;font-size:.9rem}
+ .sum{margin:0 0 1.2rem;font-size:1rem}
+ .panes{display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap}
+ .pane-right{flex:1;min-width:460px}
+ table{border-collapse:collapse;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+ th,td{padding:.55rem 1rem;border-bottom:1px solid #eee;text-align:left;font-size:.9rem}
+ th{background:#f3f4f6;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:#555}
+ tr.ok td.result{color:#15803d;font-weight:600}
+ tr.bad td.result{color:#b91c1c;font-weight:600}
+ tr.fwd td.result{color:#777}
+ iframe{width:100%;height:78vh;border:1px solid #ddd;background:#fff}
+ a{color:#2563eb} .note{font-size:.85rem;color:#666}
+</style></head><body>
+HTML
+      echo "<h1>ZW Lab conformance session — ${ACTOR}</h1>"
+      echo "<div class=meta>$(basename "$SESSION") &middot; target: ${TARGET}</div>"
+      echo "<div class=sum>&#10003; ${PASS} conformant &nbsp;&nbsp; &#10007; ${FAIL} with findings &nbsp;&nbsp; &rarr; ${FWD} passed through</div>"
+      echo "<div class=panes><div>"
+      echo "<h2>Live traffic — what your system sent</h2>"
+      echo "<table><tr><th>time</th><th>action</th><th>subject</th><th>result</th></tr>"
+      printf '%s\n' "$VERDICTS" | awk -F'|' '{
+        gsub(/&/, "\\&amp;"); gsub(/</, "\\&lt;")
+        cls = ($4 ~ /^0 errors/ || $4 ~ /^ok/) ? "ok" : ($4 ~ /forwarded/) ? "fwd" : "bad"
+        printf "<tr class=%s><td>%s</td><td>%s</td><td>%s</td><td class=result>%s</td></tr>\n", cls, $1, $2, $3, $4 }'
+      echo "</table>"
+      echo "<p class=note>also saved as verdicts.json in this folder</p>"
+      echo "</div><div class=pane-right>"
+      echo "<h2>Stored-data audit — what ended up on the server</h2>"
+      if [ -f "$SESSION/audit-report/karate-summary.html" ]; then
+        echo '<iframe src="audit-report/karate-summary.html"></iframe>'
+      else
+        echo '<p class=note>no audit ran (no patient identifiers seen in pushes)</p>'
+      fi
+      echo "</div></div></body></html>"
+    } > "$SESSION/verdicts.html"
+    echo "browser dashboard: $(pwd)/$SESSION/verdicts.html"
+    command -v open >/dev/null 2>&1 && open "$SESSION/verdicts.html"
+  fi
+
   echo
   echo "session folder:   $(pwd)/$SESSION/"
   echo "latest report:    $(pwd)/target/karate-reports/karate-summary.html"
