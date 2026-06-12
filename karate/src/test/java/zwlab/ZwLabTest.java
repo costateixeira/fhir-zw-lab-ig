@@ -44,17 +44,14 @@ class ZwLabTest {
         try {
             Path dir = Path.of(reportDir);
 
-            // Report name + build line, with a link to the Karate report (full step detail).
-            // Path is relative to the Allure index (target/site/allure-maven-plugin/) and resolves
-            // when the report is served - see README.
+            // Report name + build line. (Note: allure-maven generates its own executor from the
+            // pom; this file is used when generating with the Allure CLI instead.)
             Files.writeString(dir.resolve("executor.json"), """
                 {
                   "name": "Karate",
                   "type": "junit",
-                  "buildName": "ZW Lab IG - API tests (click for Karate step detail)",
-                  "buildUrl": "../../karate-reports/karate-summary.html",
-                  "reportName": "ZW Lab IG - Karate API tests",
-                  "reportUrl": "../../karate-reports/karate-summary.html"
+                  "buildName": "ZW Lab IG - API tests",
+                  "reportName": "ZW Lab IG - Karate API tests"
                 }
                 """);
 

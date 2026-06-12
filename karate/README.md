@@ -76,6 +76,49 @@ The runner writes `executor.json`, `environment.properties` (base URL, FHIR vers
 canonicals) and `categories.json` into the results dir, so the Allure **Environment** and
 **Categories** tabs and the report name are populated automatically.
 
+## Testing the three actors
+
+The exchange has three actors, each tested differently:
+
+| Actor | Role | How it's tested |
+|-------|------|-----------------|
+| **SHR** | repository (stores orders & results) | the **`mvn test` suite** above drives it as a client (submit + poll) |
+| **EHR** | order placer + results consumer | an **interceptor** that *waits* for the EHR |
+| **Lab system** | order consumer + report submitter | an **interceptor** that *waits* for the lab |
+
+The interceptors don't reimplement a FHIR server. They sit in front of the real one and, per request:
+
+- **a submission** (EHR placing an order / lab submitting a report) is forwarded to the real server's
+  `$validate` against the matching ZW profile — so the producer's payload is **validated, never stored**;
+  the client gets the `OperationOutcome` back.
+- **a query** (lab fetching orders / EHR fetching results) is **gated**: it must be scoped to a patient
+  (`subject` or `patient` param) or it's rejected `400`; a correct query is forwarded to the repository.
+
+Every request is logged so you can see exactly what the client did.
+
+### Running the "wait for the client" tests
+
+```bash
+cd karate
+
+# EHR conformance - listens on :8080, waits for the EHR client
+mvn test-compile exec:java -Dexec.args="ehr 8080"
+
+# Lab-system conformance - listens on :8081, waits for the lab client
+mvn test-compile exec:java -Dexec.args="lab 8081"
+
+# choose the real server used for $validate / forwarding (default is the ZW server)
+mvn test-compile exec:java -Dexec.args="ehr 8080" -Dtarget=http://173.212.195.88/fhir
+```
+
+Each command **blocks and waits**. Point the system under test at `http://localhost:<port>`, drive it
+through its order/result flow, and watch the responses (and the interceptor log) show whether it placed
+conformant resources and issued correct queries. Stop with `Ctrl+C`.
+
+Interceptor features live in [src/test/resources/zwlab/mock/](src/test/resources/zwlab/mock/)
+(`ehr.feature`, `lab.feature`); the launcher is
+[ZwLab `LabMockServer`](src/test/java/zwlab/LabMockServer.java).
+
 ## Layout
 
 ```
