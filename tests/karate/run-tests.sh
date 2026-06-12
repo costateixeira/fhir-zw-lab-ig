@@ -53,7 +53,9 @@ else
 fi
 
 RUN_EXIT=0
-java -jar "$JAR" run "${TAGS[@]}" -e "${KARATE_ENV:-local}" -g . features/ || RUN_EXIT=$?
+# FEATURES narrows the run to specific files/dirs (default: everything) so a
+# focused run's report isn't padded with 0-scenario features.
+java -jar "$JAR" run "${TAGS[@]}" -e "${KARATE_ENV:-local}" -g . ${FEATURES:-features/} || RUN_EXIT=$?
 
 # Archive every run under target/runs/<timestamp>-<env>/ so history survives
 # reruns; target/karate-reports/ keeps pointing at the latest run.

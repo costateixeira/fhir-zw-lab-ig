@@ -80,7 +80,7 @@ cleanup() {
     while IFS= read -r ident; do
       [ -z "$ident" ] && continue
       echo "· auditing patient ${ident}"
-      AUDIT_PATIENT_IDENTIFIER="$ident" SHR_URL="$TARGET" ./run-tests.sh @auditor || true
+      AUDIT_PATIENT_IDENTIFIER="$ident" SHR_URL="$TARGET" FEATURES=features/auditor.feature ./run-tests.sh @auditor || true
     done < "$SESSION/patients.txt"
   else
     echo "(no patient identifiers seen in pushes — skipping the audit)"
