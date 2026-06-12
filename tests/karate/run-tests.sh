@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 # ZW Lab actor conformance test kit runner.
 #
-#   ./run-tests.sh                       # default suite (happy path, all roles)
+#   ./run-tests.sh                       # default suite (all roles, ZW sandbox)
 #   ./run-tests.sh @lab-order-placer     # one actor's suite
 #   ./run-tests.sh @auditor              # audit externally submitted payloads
-#   KARATE_ENV=hosted ./run-tests.sh     # hosted sandbox (see karate-config.js)
+#   KARATE_ENV=local ./run-tests.sh      # local sandbox (see karate-config.js)
 #   SHR_URL=https://my-shr/fhir ./run-tests.sh   # any FHIR base URL
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../.. && pwd)"
+
+# Default environment: the hosted ZW hapi-sandbox (IGs installed,
+# validation-on-write enabled). KARATE_ENV=local targets localhost:8090.
+KARATE_ENV="${KARATE_ENV:-zw}"
 
 # returns success when a working Java 17+ is NOT on the PATH
 need_java() {
@@ -42,20 +46,22 @@ if [ ! -f "$JAR" ]; then
 fi
 
 # Workshop placeholders are always excluded. With no arguments we also skip
-# the write-validation scenarios (they need a validating server, e.g. the ZW
-# sandbox) and the auditor (needs AUDIT_PATIENT_IDENTIFIER). Passing tags
-# explicitly overrides those defaults, e.g.: ./run-tests.sh @pending-validation
+# the auditor (needs AUDIT_PATIENT_IDENTIFIER), and — only on servers without
+# validation-on-write (anything but the ZW sandbox) — the write-validation
+# rejection scenarios. Passing tags explicitly overrides those defaults,
+# e.g.: ./run-tests.sh @pending-validation
 TAGS=(-t "~@workshop")
 if [ $# -gt 0 ]; then
   for t in "$@"; do TAGS+=(-t "$t"); done
 else
-  TAGS+=(-t "~@pending-validation" -t "~@auditor")
+  TAGS+=(-t "~@auditor")
+  [ "$KARATE_ENV" = "zw" ] || [ "$KARATE_ENV" = "hosted" ] || TAGS+=(-t "~@pending-validation")
 fi
 
 RUN_EXIT=0
 # FEATURES narrows the run to specific files/dirs (default: everything) so a
 # focused run's report isn't padded with 0-scenario features.
-java -jar "$JAR" run "${TAGS[@]}" -e "${KARATE_ENV:-local}" -g . ${FEATURES:-features/} || RUN_EXIT=$?
+java -jar "$JAR" run "${TAGS[@]}" -e "$KARATE_ENV" -g . ${FEATURES:-features/} || RUN_EXIT=$?
 
 # Archive every run under target/runs/<timestamp>-<env>/ so history survives
 # reruns; target/karate-reports/ keeps pointing at the latest run.

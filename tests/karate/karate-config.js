@@ -49,8 +49,48 @@ function fn() {
   karate.configure('headers', { 'Content-Type': 'application/fhir+json', 'Accept': 'application/fhir+json' });
   karate.configure('ssl', true);
   karate.configure('connectTimeout', 10000);
-  karate.configure('readTimeout', 60000);
+  // generous: validation-on-write on a cold server can take 30s+ per request
+  karate.configure('readTimeout', 120000);
 
   karate.log('ZW Lab test kit — env:', env, '— SHR:', config.shrUrl);
+
+  // One throwaway $validate per JVM so the suite never hits a cold validator:
+  // the first validation after the server has been idle loads the IG packages
+  // (30s+), which otherwise surfaces mid-suite as body-read timeouts and null
+  // responses. Done with a plain Java HTTP client so a warmup failure can
+  // never fail the run.
+  var System = Java.type('java.lang.System');
+  if (!System.getProperty('zw.warmup.done')) {
+    System.setProperty('zw.warmup.done', 'true');
+    try {
+      var HttpClient = Java.type('java.net.http.HttpClient');
+      var HttpRequest = Java.type('java.net.http.HttpRequest');
+      var BodyPublishers = Java.type('java.net.http.HttpRequest$BodyPublishers');
+      var BodyHandlers = Java.type('java.net.http.HttpResponse$BodyHandlers');
+      var URI = Java.type('java.net.URI');
+      var Duration = Java.type('java.time.Duration');
+      var URLEncoder = Java.type('java.net.URLEncoder');
+      var Files = Java.type('java.nio.file.Files');
+      var Paths = Java.type('java.nio.file.Paths');
+      // user.dir == tests/karate (run-tests.sh cds there)
+      var order = new java.lang.String(
+        Files.readAllBytes(Paths.get(System.getProperty('user.dir'), 'data', 'order-bundle.json')), 'UTF-8');
+      var uri = config.shrUrl + '/Bundle/$validate?profile='
+        + URLEncoder.encode(config.profiles.orderBundle, 'UTF-8');
+      var req = HttpRequest.newBuilder(URI.create(uri))
+        .timeout(Duration.ofSeconds(180))
+        .header('Content-Type', 'application/fhir+json')
+        .POST(BodyPublishers.ofString(order))
+        .build();
+      var started = System.currentTimeMillis();
+      var res = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+        .send(req, BodyHandlers.discarding());
+      karate.log('warmup: validator answered HTTP', res.statusCode(),
+        'in', (System.currentTimeMillis() - started) + 'ms');
+    } catch (e) {
+      karate.log('warmup failed (continuing anyway):', e.message ? e.message : e);
+    }
+  }
+
   return config;
 }
