@@ -54,7 +54,7 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     Given url target
     And request body
     When method post
-    * def responseHeaders = { 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.Bundle)' }
+    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.Bundle)' }
 
   # ── EHR places a single ServiceRequest ──
   Scenario: methodIs('post') && pathMatches('/ServiceRequest')
@@ -70,7 +70,7 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     And path 'ServiceRequest'
     And request body
     When method post
-    * def responseHeaders = { 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.ServiceRequest)' }
+    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.ServiceRequest)' }
 
   # ── EHR consumes results: must be patient-scoped, then forwarded ──
   Scenario: methodIs('get') && pathMatches('/DiagnosticReport') && (requestParams.subject != null || requestParams.patient != null || requestParams['patient.identifier'] != null)

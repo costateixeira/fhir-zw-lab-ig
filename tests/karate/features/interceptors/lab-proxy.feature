@@ -53,7 +53,7 @@ Feature: Lab-system conformance proxy - order fulfiller + result provider (pass-
     And path 'Bundle'
     And request body
     When method post
-    * def responseHeaders = { 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.Bundle)' }
+    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.Bundle)' }
 
   # ── Lab submits a DiagnosticReport ──
   Scenario: methodIs('post') && pathMatches('/DiagnosticReport')
@@ -69,7 +69,7 @@ Feature: Lab-system conformance proxy - order fulfiller + result provider (pass-
     And path 'DiagnosticReport'
     And request body
     When method post
-    * def responseHeaders = { 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.DiagnosticReport)' }
+    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.DiagnosticReport)' }
 
   # ── Lab pulls orders: must be patient-scoped, then forwarded ──
   Scenario: methodIs('get') && pathMatches('/ServiceRequest') && (requestParams.subject != null || requestParams.patient != null || requestParams['patient.identifier'] != null)

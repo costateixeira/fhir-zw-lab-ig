@@ -141,3 +141,16 @@ the suite can run repeatedly against a shared server without collisions.
 2. Write the steps (copy patterns from the implemented scenarios above it).
 3. Remove the `@workshop` tag and run the feature:
    `./run-tests.sh @lab-order-fulfiller`
+
+## EHR simulator (no system? no problem)
+
+`simulator/ehr-simulator.html` is a zero-dependency page — open it straight
+from disk in Chrome. Pick a payload (valid / invalid / the real Impilo
+sample / your own), click **Submit order**, and it POSTs to the proxy with
+fresh identifiers per submit; the conformance verdict and full response are
+shown inline. The pull buttons demo patient-scoped vs refused queries.
+
+Typical demo: `./test-session.sh ehr` in one terminal, the simulator in the
+browser — every click appears in the session's live feed and counts toward
+the end-of-session audit. Regenerate the page after changing payload data:
+`scripts/build-simulator.sh`.

@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>ZW Lab — EHR Simulator</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; max-width: 1000px;
+         margin: 24px auto; padding: 0 16px; line-height: 1.45; }
+  h1 { font-size: 20px; } h1 small { font-weight: normal; color: #777; font-size: 13px; }
+  fieldset { border: 1px solid #bbb4; border-radius: 8px; margin-bottom: 14px; padding: 10px 14px; }
+  legend { font-size: 12px; color: #888; padding: 0 6px; }
+  label { font-size: 13px; margin-right: 14px; }
+  input[type=text] { width: 320px; font-family: ui-monospace, monospace; font-size: 13px; padding: 4px 6px; }
+  select { font-size: 13px; padding: 3px; }
+  textarea { width: 100%; height: 260px; font-family: ui-monospace, monospace; font-size: 12px;
+             border: 1px solid #bbb4; border-radius: 6px; padding: 8px; box-sizing: border-box; }
+  button { font-size: 14px; padding: 7px 16px; border-radius: 6px; border: 1px solid #888a;
+           cursor: pointer; margin-right: 8px; background: transparent; }
+  button.primary { background: #1f6feb; color: white; border-color: #1f6feb; }
+  #verdict { font-size: 14px; font-weight: 600; margin: 12px 0 6px; }
+  #verdict.pass { color: #1a7f37; } #verdict.fail { color: #cf222e; } #verdict.info { color: #777; }
+  pre#out { border: 1px solid #bbb4; border-radius: 6px; padding: 10px; font-size: 11.5px;
+            max-height: 420px; overflow: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>ZW Lab — EHR Simulator <small>plays the Lab Order Placer / Result Consumer</small></h1>
+
+<fieldset>
+  <legend>where to send</legend>
+  <label>Proxy / server base <input type="text" id="base" value="http://localhost:8080"/></label>
+  <label><input type="checkbox" id="fresh" checked/> fresh patient &amp; sample identifiers per submit</label>
+</fieldset>
+
+<fieldset>
+  <legend>payload</legend>
+  <label>Choose:
+    <select id="pick" onchange="pickPayload()">
+      <option value="valid">Valid order bundle (from the IG example)</option>
+      <option value="invalid">Invalid order bundle (missing code + identifier)</option>
+      <option value="impilo">Real Impilo order sample</option>
+      <option value="custom">Custom (paste your own)</option>
+    </select>
+  </label>
+  <textarea id="payload" spellcheck="false"></textarea>
+</fieldset>
+
+<div>
+  <button class="primary" onclick="submitOrder()">Submit order (POST bundle)</button>
+  <button onclick="pullScoped()">Pull results (patient-scoped)</button>
+  <button onclick="pullUnscoped()">Pull results (unscoped — should be refused)</button>
+</div>
+
+<div id="verdict" class="info">no request sent yet</div>
+<pre id="out"></pre>
+
+<script>
+const PAYLOADS = {
+  valid: {
+  "resourceType": "Bundle",
+  "meta": {
+    "profile": [
+      "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-order-bundle"
+    ]
+  },
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0001",
+      "resource": {
+        "resourceType": "Task",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-task"
+          ]
+        },
+        "intent": "order",
+        "input": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "pregnant"
+                }
+              ]
+            },
+            "valueBoolean": false
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "breastfeeding"
+                }
+              ]
+            },
+            "valueBoolean": false
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "art-start-date"
+                }
+              ]
+            },
+            "valueDate": "2019-07-01"
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "regimen"
+                }
+              ]
+            },
+            "valueString": "TDF/3TC/DTG"
+          }
+        ],
+        "status": "requested",
+        "for": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+        },
+        "basedOn": [
+          {
+            "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0002"
+          }
+        ],
+        "location": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0005"
+        },
+        "restriction": {
+          "recipient": [
+            {
+              "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0006"
+            }
+          ]
+        },
+        "authoredOn": "2024-03-15T08:00:00+02:00"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Task"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0002",
+      "resource": {
+        "resourceType": "ServiceRequest",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-service-request"
+          ]
+        },
+        "intent": "order",
+        "status": "active",
+        "code": {
+          "coding": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-lab-tests",
+              "code": "LTT0013",
+              "display": "Viral Load Plasma"
+            }
+          ]
+        },
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-reason-for-test",
+                "code": "routine",
+                "display": "Routine"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+        },
+        "specimen": [
+          {
+            "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0004"
+          }
+        ],
+        "locationReference": [
+          {
+            "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0005"
+          }
+        ],
+        "authoredOn": "2024-03-15T08:00:00+02:00"
+      },
+      "request": {
+        "method": "POST",
+        "url": "ServiceRequest"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003",
+      "resource": {
+        "resourceType": "Patient",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-patient"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id",
+            "value": "EHR-ZW-00123"
+          },
+          {
+            "system": "http://mohcc.gov.zw/fhir/lab/identifier/art-number",
+            "value": "HRE/2019/005678"
+          }
+        ],
+        "extension": [
+          {
+            "url": "http://mohcc.gov.zw/fhir/lab/StructureDefinition/date-of-birth-estimated",
+            "valueBoolean": false
+          }
+        ],
+        "name": [
+          {
+            "given": [
+              "Rutendo"
+            ],
+            "family": "Moyo"
+          }
+        ],
+        "birthDate": "1988-04-15",
+        "gender": "female",
+        "maritalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+              "code": "M",
+              "display": "Married"
+            }
+          ]
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Patient",
+        "ifNoneExist": "identifier=http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id|EHR-ZW-00123"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0004",
+      "resource": {
+        "resourceType": "Specimen",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-specimen"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://mohcc.gov.zw/fhir/lab/identifier/client-sample-id",
+            "value": "ZW-SPEC-2024-00456"
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-sample-types",
+              "code": "LST006",
+              "display": "Blood Plasma"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+        },
+        "collection": {
+          "collectedDateTime": "2024-03-15T08:30:00+02:00"
+        },
+        "status": "available"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Specimen"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0005",
+      "resource": {
+        "resourceType": "Location",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-facility"
+          ]
+        },
+        "name": "Harare City Health Clinic",
+        "status": "active"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Location",
+        "ifNoneExist": "name=Harare%20City%20Health%20Clinic"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0006",
+      "resource": {
+        "resourceType": "Organization",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-laboratory"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-laboratories",
+            "value": "ZWLPAR001"
+          }
+        ],
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+                "code": "other",
+                "display": "Other"
+              }
+            ],
+            "text": "Laboratory"
+          }
+        ],
+        "name": "National Virology Laboratory"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Organization",
+        "ifNoneExist": "identifier=http%3A%2F%2Fmohcc.gov.zw%2Ffhir%2Flab%2FCodeSystem%2Fzw-laboratories%7CZWLPAR001"
+      }
+    }
+  ]
+},
+  invalid: {
+  "resourceType": "Bundle",
+  "meta": {
+    "profile": [
+      "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-order-bundle"
+    ]
+  },
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0001",
+      "resource": {
+        "resourceType": "Task",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-task"
+          ]
+        },
+        "intent": "order",
+        "input": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "pregnant"
+                }
+              ]
+            },
+            "valueBoolean": false
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "breastfeeding"
+                }
+              ]
+            },
+            "valueBoolean": false
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "art-start-date"
+                }
+              ]
+            },
+            "valueDate": "2019-07-01"
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-task-input-type",
+                  "code": "regimen"
+                }
+              ]
+            },
+            "valueString": "TDF/3TC/DTG"
+          }
+        ],
+        "status": "requested",
+        "for": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+        },
+        "basedOn": [
+          {
+            "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0002"
+          }
+        ],
+        "location": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0005"
+        },
+        "restriction": {
+          "recipient": [
+            {
+              "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0006"
+            }
+          ]
+        },
+        "authoredOn": "2024-03-15T08:00:00+02:00"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Task"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0002",
+      "resource": {
+        "resourceType": "ServiceRequest",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-service-request"
+          ]
+        },
+        "intent": "order",
+        "status": "active",
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-reason-for-test",
+                "code": "routine",
+                "display": "Routine"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+        },
+        "specimen": [
+          {
+            "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0004"
+          }
+        ],
+        "locationReference": [
+          {
+            "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0005"
+          }
+        ],
+        "authoredOn": "2024-03-15T08:00:00+02:00"
+      },
+      "request": {
+        "method": "POST",
+        "url": "ServiceRequest"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003",
+      "resource": {
+        "resourceType": "Patient",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-patient"
+          ]
+        },
+        "extension": [
+          {
+            "url": "http://mohcc.gov.zw/fhir/lab/StructureDefinition/date-of-birth-estimated",
+            "valueBoolean": false
+          }
+        ],
+        "name": [
+          {
+            "given": [
+              "Rutendo"
+            ],
+            "family": "Moyo"
+          }
+        ],
+        "birthDate": "1988-04-15",
+        "gender": "female",
+        "maritalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-MaritalStatus",
+              "code": "M",
+              "display": "Married"
+            }
+          ]
+        }
+      },
+      "request": {
+        "method": "POST",
+        "url": "Patient"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0004",
+      "resource": {
+        "resourceType": "Specimen",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-specimen"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://mohcc.gov.zw/fhir/lab/identifier/client-sample-id",
+            "value": "ZW-SPEC-2024-00456"
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-sample-types",
+              "code": "LST006",
+              "display": "Blood Plasma"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+        },
+        "collection": {
+          "collectedDateTime": "2024-03-15T08:30:00+02:00"
+        },
+        "status": "available"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Specimen"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0005",
+      "resource": {
+        "resourceType": "Location",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-facility"
+          ]
+        },
+        "name": "Harare City Health Clinic",
+        "status": "active"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Location",
+        "ifNoneExist": "name=Harare%20City%20Health%20Clinic"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0006",
+      "resource": {
+        "resourceType": "Organization",
+        "meta": {
+          "profile": [
+            "http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-laboratory"
+          ]
+        },
+        "identifier": [
+          {
+            "system": "http://mohcc.gov.zw/fhir/lab/CodeSystem/zw-laboratories",
+            "value": "ZWLPAR001"
+          }
+        ],
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/organization-type",
+                "code": "other",
+                "display": "Other"
+              }
+            ],
+            "text": "Laboratory"
+          }
+        ],
+        "name": "National Virology Laboratory"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Organization",
+        "ifNoneExist": "identifier=http%3A%2F%2Fmohcc.gov.zw%2Ffhir%2Flab%2FCodeSystem%2Fzw-laboratories%7CZWLPAR001"
+      }
+    }
+  ]
+},
+  impilo: {
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Location",
+        "id": "002",
+        "identifier": [
+          {
+            "id": "uid-002",
+            "system": "urn:impilo:uid",
+            "value": "002"
+          },
+          {
+            "id": "code-ILB0003",
+            "system": "urn:impilo:code",
+            "value": "ILB0003"
+          }
+        ],
+        "name": "NMRL",
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "urn:impilo",
+                "code": "laboratory",
+                "display": "Laboratory"
+              }
+            ]
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Location/002"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Location",
+        "id": "ZW000B03",
+        "identifier": [
+          {
+            "id": "uid-ZW000B03",
+            "system": "urn:impilo:uid",
+            "value": "ZW000B03"
+          },
+          {
+            "id": "code-IFC0111",
+            "system": "urn:impilo:code",
+            "value": "IFC0111"
+          },
+          {
+            "id": "dhis-JHGXfAqaDN6",
+            "system": "urn:impilo:dhis",
+            "value": "JHGXfAqaDN6"
+          }
+        ],
+        "name": "St.Mary's Clinic",
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "urn:impilo",
+                "code": "facility",
+                "display": "Facility"
+              }
+            ]
+          }
+        ],
+        "position": {
+          "longitude": 31.0427,
+          "latitude": -17.9947
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Location/ZW000B03"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Organization",
+        "id": "ZW000B03",
+        "identifier": [
+          {
+            "id": "uid-ZW000B03",
+            "system": "urn:impilo:uid",
+            "value": "ZW000B03"
+          },
+          {
+            "id": "code-IFC0111",
+            "system": "urn:impilo:code",
+            "value": "IFC0111"
+          },
+          {
+            "id": "dhis-JHGXfAqaDN6",
+            "system": "urn:impilo:dhis",
+            "value": "JHGXfAqaDN6"
+          }
+        ],
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "urn:impilo",
+                "code": "facility",
+                "display": "Facility"
+              }
+            ]
+          }
+        ],
+        "name": "St.Mary's Clinic"
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Organization/ZW000B03"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683",
+        "identifier": [
+          {
+            "system": "urn:opencr:cruid",
+            "value": "69b7736c-ed31-4624-a1d5-aff5bfd7c8ff"
+          }
+        ],
+        "gender": "male",
+        "birthDate": "2003-02-28",
+        "managingOrganization": {
+          "reference": "Organization/ZW000B03",
+          "type": "Organization",
+          "display": "St.Mary's Clinic"
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+        "meta": {
+          "tag": [
+            {
+              "system": "http://fhir.IMPILOMRS.org/ext/encounter-tag",
+              "code": "fhirEncounter",
+              "display": "Encounter"
+            }
+          ]
+        },
+        "identifier": [
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+            "system": "urn:impilo:labreqno",
+            "value": "50248Y"
+          }
+        ],
+        "status": "unknown",
+        "class": {
+          "system": "urn:class",
+          "code": "ORD",
+          "display": "ORD"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://fhir.IMPILOMRS.org/code-system/encounter-type",
+                "code": "ORDER",
+                "display": "ORDER"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683",
+          "type": "Patient"
+        },
+        "period": {
+          "start": "2026-06-11T00:00:00+02:00"
+        },
+        "location": [
+          {
+            "location": {
+              "reference": "Location/ZW000B03",
+              "type": "Location"
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Encounter/b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Specimen",
+        "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+        "identifier": [
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+            "type": {
+              "coding": [
+                {
+                  "code": "LAB_REQUEST_NUM"
+                }
+              ],
+              "text": "Laboratory Request Number"
+            },
+            "system": "urn:impilo:cid",
+            "value": "50248Y"
+          },
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca-short",
+            "type": {
+              "coding": [
+                {
+                  "code": "LAB_REQUEST_NUM"
+                }
+              ],
+              "text": "Laboratory Request Number"
+            },
+            "system": "urn:impilo:cid:short",
+            "value": "50248Y"
+          },
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca-long",
+            "type": {
+              "coding": [
+                {
+                  "code": "LAB_REQUEST_NUM"
+                }
+              ],
+              "text": "Laboratory Request Number"
+            },
+            "system": "urn:impilo:cid:long",
+            "value": "00-0B-03-2026-L-00002"
+          }
+        ],
+        "type": {
+          "coding": [
+            {
+              "system": "urn:impilo:code",
+              "code": "IST0002",
+              "display": "Blood"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683",
+          "type": "Patient"
+        },
+        "collection": {
+          "collectedDateTime": "2026-06-11T09:40:52+02:00"
+        }
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Specimen/b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "ServiceRequest",
+        "id": "d97e245d-e50e-4e02-b2bf-9863a4821ac9",
+        "status": "active",
+        "intent": "order",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "urn:category",
+                "code": "ORD",
+                "display": "ORD"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "urn:impilo:code",
+              "code": "ILT0048",
+              "display": "Viral Load"
+            },
+            {
+              "system": "https://openconceptlab.org/orgs/CIEL/sources/CIEL",
+              "code": "856"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683",
+          "type": "Patient"
+        },
+        "specimen": [
+          {
+            "reference": "Specimen/b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+            "type": "Specimen"
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "ServiceRequest/d97e245d-e50e-4e02-b2bf-9863a4821ac9"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Task",
+        "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+        "identifier": [
+          {
+            "id": "uid-b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+            "system": "urn:impilo:uid",
+            "value": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+          },
+          {
+            "id": "ZW000B03-b7bb994d-8408-439d-9ce5-ac76abcaf5ca-uid",
+            "system": "urn:impilo:ZW000B03:uid",
+            "value": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+          },
+          {
+            "id": "for-lab-b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+            "system": "urn:impilo:ILB0003:lab",
+            "value": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+          },
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+            "system": "urn:impilo:labreqno",
+            "value": "50248Y"
+          },
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca-short",
+            "system": "urn:impilo:shortLabReqno",
+            "value": "50248Y"
+          },
+          {
+            "id": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca-long",
+            "system": "urn:impilo:longLabReqno",
+            "value": "00-0B-03-2026-L-00002"
+          }
+        ],
+        "basedOn": [
+          {
+            "reference": "ServiceRequest/d97e245d-e50e-4e02-b2bf-9863a4821ac9",
+            "type": "ServiceRequest"
+          }
+        ],
+        "groupIdentifier": {
+          "id": "for-lab-b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+          "system": "urn:impilo:ILB0003:lab",
+          "value": "b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+        },
+        "status": "requested",
+        "intent": "order",
+        "code": {
+          "coding": [
+            {
+              "system": "http://hl7.org/fhir/CodeSystem/task-code",
+              "code": "fulfill"
+            },
+            {
+              "system": "urn:impilo:test:code",
+              "code": "ILT0048",
+              "display": "Viral Load"
+            }
+          ]
+        },
+        "for": {
+          "reference": "Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683",
+          "type": "Patient"
+        },
+        "encounter": {
+          "reference": "Encounter/b7bb994d-8408-439d-9ce5-ac76abcaf5ca",
+          "type": "Encounter"
+        },
+        "executionPeriod": {
+          "start": "2026-06-11T09:41:24+02:00"
+        },
+        "authoredOn": "2026-06-11T09:41:25+02:00",
+        "location": {
+          "reference": "Location/002",
+          "type": "Location"
+        },
+        "input": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "urn:impilo:medication",
+                  "code": "IRG0071",
+                  "display": "IRG0071"
+                }
+              ]
+            },
+            "valueReference": {
+              "extension": [
+                {
+                  "url": "urn:start:date",
+                  "valueDate": "2026-06-11"
+                }
+              ],
+              "type": "Medication",
+              "identifier": {
+                "use": "secondary",
+                "system": "urn:impilo:medication",
+                "value": "IRG0071"
+              },
+              "display": "IRG0071"
+            }
+          }
+        ]
+      },
+      "request": {
+        "method": "PUT",
+        "url": "Task/b7bb994d-8408-439d-9ce5-ac76abcaf5ca"
+      }
+    }
+  ]
+}
+};
+
+function pickPayload() {
+  const k = document.getElementById('pick').value;
+  if (k !== 'custom') document.getElementById('payload').value = JSON.stringify(PAYLOADS[k], null, 2);
+}
+pickPayload();
+
+function base() { return document.getElementById('base').value.replace(/\/+$/, ''); }
+
+function freshen(text) {
+  if (!document.getElementById('fresh').checked) return text;
+  const ts = Date.now();
+  return text
+    .replaceAll('EHR-ZW-00123', 'EHR-SIM-' + ts)
+    .replaceAll('ZW-SPEC-2024-00456', 'SPEC-SIM-' + ts);
+}
+
+function show(kind, headline, body) {
+  const v = document.getElementById('verdict');
+  v.className = kind; v.textContent = headline;
+  document.getElementById('out').textContent = body;
+}
+
+async function send(method, url, bodyText) {
+  show('info', '… sending ' + method + ' ' + url, '');
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: bodyText ? { 'Content-Type': 'application/fhir+json' } : { 'Accept': 'application/fhir+json' },
+      body: bodyText || undefined
+    });
+    const verdict = res.headers.get('X-ZW-Validation');
+    const text = await res.text();
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    const ok = res.ok && (!verdict || verdict.startsWith('0 '));
+    const head = 'HTTP ' + res.status + (verdict ? '   ·   conformance: ' + verdict : '');
+    show(ok ? 'pass' : 'fail', (ok ? '✓ ' : '✗ ') + head, pretty);
+  } catch (e) {
+    show('fail', '✗ request failed — is the proxy running?', String(e));
+  }
+}
+
+function submitOrder() {
+  const text = freshen(document.getElementById('payload').value);
+  send('POST', base() + '/', text);
+}
+function pullScoped() {
+  send('GET', base() + '/DiagnosticReport?patient=Patient/9d480e52-5ae2-4c5d-bebb-1cdb9e3c4683');
+}
+function pullUnscoped() {
+  send('GET', base() + '/DiagnosticReport');
+}
+</script>
+</body>
+</html>
