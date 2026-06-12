@@ -7,16 +7,24 @@
 #   ./run-interceptor.sh ehr 8080                      # EHR: order placer + result consumer
 #   ./run-interceptor.sh lab 8081                      # Lab: order fulfiller + result provider
 #   TARGET=https://my-shr/fhir ./run-interceptor.sh ehr 8080   # real server behind the interceptor
+#   MODE=dryrun ./run-interceptor.sh ehr 8080          # validate-only: relay verdicts, store nothing
 #
-# Point the client under test at http://localhost:<port> and drive it through
-# its order/result flow; every request is logged. Stop with Ctrl+C.
+# Default MODE=proxy: a pass-through conformance proxy — point the client at
+# it ONCE and leave it; requests are forwarded to the real server and pushes
+# are scored against the ZW profiles on the way through (X-ZW-Validation
+# header + ZWPROXY log lines). Stop with Ctrl+C.
 set -euo pipefail
 cd "$(dirname "$0")"
 REPO_ROOT="$(cd ../.. && pwd)"
 
 ACTOR="${1:?usage: run-interceptor.sh <ehr|lab> [port]}"
 PORT="${2:-8080}"
-FEATURE="features/interceptors/${ACTOR}.feature"
+MODE="${MODE:-proxy}"
+if [ "$MODE" = "dryrun" ]; then
+  FEATURE="features/interceptors/${ACTOR}.feature"
+else
+  FEATURE="features/interceptors/${ACTOR}-proxy.feature"
+fi
 [ -f "$FEATURE" ] || { echo "ERROR: unknown actor '$ACTOR' (expected: ehr, lab)" >&2; exit 1; }
 
 # returns success when a working Java 17+ is NOT on the PATH
@@ -43,5 +51,5 @@ if [ ! -f "$JAR" ]; then
   curl -fL -o "$JAR" "https://github.com/karatelabs/karate/releases/download/v${KARATE_VERSION}/karate-${KARATE_VERSION}.jar"
 fi
 
-echo "${ACTOR} interceptor listening on http://localhost:${PORT} (target: ${TARGET:-default})"
+echo "${ACTOR} ${MODE} interceptor listening on http://localhost:${PORT} (target: ${TARGET:-default})"
 java ${TARGET:+-Dtarget="$TARGET"} -jar "$JAR" mock -m "$FEATURE" -p "$PORT"
