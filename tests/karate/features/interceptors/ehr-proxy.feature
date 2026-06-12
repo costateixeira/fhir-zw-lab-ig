@@ -135,6 +135,13 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     * def responseStatus = 400
     * def response = { resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'required', diagnostics: 'result query must be scoped to a patient (subject or patient parameter)' }] }
 
+  # ── capability pings (GET /metadata) are infrastructure noise: forward
+  #    them silently so they never clutter the feed or the session report ──
+  Scenario: methodIs('get') && pathMatches('/metadata')
+    Given url target + '/metadata'
+    And params requestParams
+    When method get
+
   # ── any other GET: forward transparently ──
   Scenario: methodIs('get')
     * karate.log('ZWPROXY|pull|' + requestUri + '|forwarded')
