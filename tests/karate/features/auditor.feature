@@ -21,7 +21,7 @@ Feature: Auditor — validate payloads submitted by an external system
     And param identifier = auditIdentifier
     When method get
     Then status 200
-    And match response.entry == '#[_ > 0]'
+    * if (!response.entry || response.entry.length == 0) karate.fail('AUDIT: no Patient on ' + shrUrl + ' matches identifier ' + auditIdentifier + ' — the push never stored a patient (rejected? forwarded elsewhere?), so there is nothing to audit')
     * def patientId = response.entry[0].resource.id
 
     # ── collect the patient's lab workflow resources ──

@@ -17,14 +17,22 @@ PORT="${2:-8080}"
 # if the requested port is taken (e.g. Docker/OrbStack forwards on 8080/8081),
 # walk up to the next free one
 while lsof -ti tcp:"$PORT" >/dev/null 2>&1; do
+  HOLDER="$(lsof -ti tcp:"$PORT" 2>/dev/null | head -1)"
+  if ps -p "${HOLDER:-0}" -o command= 2>/dev/null | grep -q 'karate.*mock'; then
+    echo "⚠ port $PORT is held by a LEFTOVER conformance proxy (pid $HOLDER) from an earlier session."
+    echo "  Anything still pointed at :$PORT will talk to that zombie, not to this session."
+    echo "  Free it with:  kill $HOLDER"
+  fi
   echo "(port $PORT is in use — trying $((PORT + 1)))"
   PORT=$((PORT + 1))
 done
 TARGET="${TARGET:-http://173.212.195.88/fhir}"
 SESSION="target/sessions/$(date +%Y%m%d-%H%M%S)-${ACTOR}"
 mkdir -p "$SESSION"
-rm -f target/session-patients.txt session-patients.txt
-rm -f target/session-validation-reports.json session-validation-reports.json
+# state files are scoped to this proxy's port (see run-interceptor.sh), so a
+# leftover proxy from an earlier session can never feed this session's audit
+rm -f "target/session-${PORT}-patients.txt" "session-${PORT}-patients.txt"
+rm -f "target/session-${PORT}-validation-reports.json" "session-${PORT}-validation-reports.json"
 
 LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | cut -d' ' -f1 || echo localhost)"
 
@@ -70,16 +78,21 @@ cleanup() {
         sep=",\n" }
       END { print "\n]" }' > "$SESSION/verdicts.json"
     echo "  (saved as JSON: $SESSION/verdicts.json)"
+  else
+    echo "⚠ no requests reached this session's proxy — nothing to report or audit."
+    echo "  Your system / simulator must point at:  http://${LAN_IP}:${PORT}  (or http://localhost:${PORT})"
+    echo "  If it was configured before this session started, it may still be talking"
+    echo "  to an older proxy — check with:  pkill -f 'karate.*mock'  and start over."
   fi
 
   # full per-request validation error reports written by the proxy; the ids
   # in here match the trailing field of the ZWPROXY log lines
-  for f in target/session-validation-reports.json session-validation-reports.json; do
+  for f in "target/session-${PORT}-validation-reports.json" "session-${PORT}-validation-reports.json"; do
     [ -s "$f" ] && cp "$f" "$SESSION/validation-reports.json" && break
   done
 
   PATIENTS_FILE=""
-  for f in target/session-patients.txt session-patients.txt; do
+  for f in "target/session-${PORT}-patients.txt" "session-${PORT}-patients.txt"; do
     [ -s "$f" ] && PATIENTS_FILE="$f" && break
   done
   if [ -n "$PATIENTS_FILE" ]; then

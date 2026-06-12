@@ -52,4 +52,6 @@ if [ ! -f "$JAR" ]; then
 fi
 
 echo "${ACTOR} ${MODE} interceptor listening on http://localhost:${PORT} (target: ${TARGET:-default})"
-java ${TARGET:+-Dtarget="$TARGET"} -jar "$JAR" mock -m "$FEATURE" -p "$PORT"
+# zw.port scopes the proxy's state files (session patients / validation
+# reports) so concurrent or leftover proxies never share them
+java ${TARGET:+-Dtarget="$TARGET"} -Dzw.port="$PORT" -jar "$JAR" mock -m "$FEATURE" -p "$PORT"

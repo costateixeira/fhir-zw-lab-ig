@@ -12,6 +12,11 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     * configure cors = true
     * def System = Java.type('java.lang.System')
     * def target = System.getProperty('target', 'http://173.212.195.88/fhir')
+    # state files are port-scoped so a stale proxy from an earlier session
+    # can never contaminate another session's audit or report
+    * def zwPort = System.getProperty('zw.port')
+    * def patientsFile = 'session' + (zwPort ? '-' + zwPort : '') + '-patients.txt'
+    * def reportsFile = 'session' + (zwPort ? '-' + zwPort : '') + '-validation-reports.json'
     * def profiles =
       """
       {
@@ -45,7 +50,7 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
       function(action, subject, profile, issues) {
         var id = 'r' + (valReports.length + 1);
         valReports.push({ id: id, action: action, subject: subject, profile: profile, errors: issues.length, issues: issues });
-        karate.write(JSON.stringify(valReports, null, 2), 'session-validation-reports.json');
+        karate.write(JSON.stringify(valReports, null, 2), reportsFile);
         return id;
       }
       """
@@ -78,7 +83,7 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
             }
           }
         }
-        karate.write(Object.keys(seenPatients).join('\n'), 'session-patients.txt');
+        karate.write(Object.keys(seenPatients).join('\n'), patientsFile);
       }
       """
 
