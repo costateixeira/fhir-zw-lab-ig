@@ -20,6 +20,12 @@
   button.primary { background: #1f6feb; color: white; border-color: #1f6feb; }
   #verdict { font-size: 14px; font-weight: 600; margin: 12px 0 6px; }
   #verdict.pass { color: #1a7f37; } #verdict.fail { color: #cf222e; } #verdict.info { color: #777; }
+  #report .issue { border-left: 3px solid #cf222e; padding: 4px 10px; margin: 6px 0; font-size: 12.5px; }
+  #report .issue b { text-transform: uppercase; font-size: 11px; color: #cf222e; margin-right: 6px; }
+  #report .issue code { font-size: 11.5px; background: #8883; padding: 1px 5px; border-radius: 4px; }
+  #report .issue .msg { margin-top: 2px; }
+  #report .none { color: #1a7f37; font-size: 12.5px; margin: 6px 0; }
+  #report .more { color: #777; font-size: 12px; margin: 6px 0; }
   pre#out { border: 1px solid #bbb4; border-radius: 6px; padding: 10px; font-size: 11.5px;
             max-height: 420px; overflow: auto; white-space: pre-wrap; }
 </style>
@@ -44,6 +50,7 @@
 <div id="actions"></div>
 
 <div id="verdict" class="info">no request sent yet</div>
+<div id="report"></div>
 <pre id="out"></pre>
 
 <script>
@@ -1110,6 +1117,33 @@ function show(kind, headline, body) {
   const v = document.getElementById('verdict');
   v.className = kind; v.textContent = headline;
   document.getElementById('out').textContent = body;
+  document.getElementById('report').innerHTML = '';
+}
+
+// human-readable error report: one block per validation issue, with the
+// element path it points at and the validator's message
+function renderReport(verdict, issues) {
+  const el = document.getElementById('report');
+  el.innerHTML = '';
+  if (issues && issues.length) {
+    issues.forEach(i => {
+      const d = document.createElement('div'); d.className = 'issue';
+      const sev = document.createElement('b'); sev.textContent = i.severity || 'error';
+      const loc = document.createElement('code'); loc.textContent = i.location || '(bundle)';
+      const msg = document.createElement('div'); msg.className = 'msg'; msg.textContent = i.message || '';
+      d.append(sev, loc, msg);
+      el.appendChild(d);
+    });
+    const total = parseInt(verdict, 10);
+    if (total > issues.length) {
+      const m = document.createElement('div'); m.className = 'more';
+      m.textContent = 'showing the first ' + issues.length + ' of ' + total +
+        ' findings — the full list is in the session’s validation-reports.json / dashboard';
+      el.appendChild(m);
+    }
+  } else if (verdict && verdict.startsWith('0 ')) {
+    el.innerHTML = '<div class="none">no conformance findings</div>';
+  }
 }
 
 async function send(method, url, bodyText) {
@@ -1123,10 +1157,23 @@ async function send(method, url, bodyText) {
     const verdict = res.headers.get('X-ZW-Validation');
     const text = await res.text();
     let pretty = text;
-    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch (e) {}
+    let parsed = null;
+    try { parsed = JSON.parse(text); pretty = JSON.stringify(parsed, null, 2); } catch (e) {}
+    // issue details: from the proxy's report header, or — when talking to a
+    // strict server directly — from an OperationOutcome response body
+    let issues = null;
+    const rep = res.headers.get('X-ZW-Validation-Report');
+    if (rep) { try { issues = JSON.parse(decodeURIComponent(rep)); } catch (e) {} }
+    if ((!issues || !issues.length) && parsed && parsed.resourceType === 'OperationOutcome' && parsed.issue) {
+      issues = parsed.issue.filter(i => i.severity === 'error' || i.severity === 'fatal')
+        .map(i => ({ severity: i.severity,
+                     location: (i.expression || i.location || [])[0] || '',
+                     message: i.diagnostics || (i.details && i.details.text) || '' }));
+    }
     const ok = res.ok && (!verdict || verdict.startsWith('0 '));
     const head = 'HTTP ' + res.status + (verdict ? '   ·   conformance: ' + verdict : '');
     show(ok ? 'pass' : 'fail', (ok ? '✓ ' : '✗ ') + head, pretty);
+    renderReport(verdict, issues);
   } catch (e) {
     show('fail', '✗ request failed — is the proxy running?', String(e));
   }

@@ -19,7 +19,51 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
         ServiceRequest: 'http://mohcc.gov.zw/fhir/lab/StructureDefinition/zw-lab-service-request'
       }
       """
-    * def errorCount = function(oo){ return karate.jsonPath(oo, "$.issue[?(@.severity=='error' || @.severity=='fatal')]").length }
+    # error/fatal issues from a $validate OperationOutcome, in report form
+    * def extractIssues =
+      """
+      function(oo) {
+        var out = [];
+        var list = (oo && oo.issue) ? oo.issue : [];
+        for (var i = 0; i < list.length; i++) {
+          var it = list[i];
+          if (it.severity == 'error' || it.severity == 'fatal') {
+            out.push({ severity: it.severity,
+                       location: (it.expression && it.expression.length) ? it.expression[0] : ((it.location && it.location.length) ? it.location[0] : ''),
+                       message: it.diagnostics ? it.diagnostics : ((it.details && it.details.text) ? it.details.text : '') });
+          }
+        }
+        return out;
+      }
+      """
+    # full per-request error reports, accumulated for the session dashboard;
+    # the returned id is appended to the ZWPROXY log line so the dashboard
+    # can link each request row to its report
+    * def valReports = []
+    * def recordReport =
+      """
+      function(action, subject, profile, issues) {
+        var id = 'r' + (valReports.length + 1);
+        valReports.push({ id: id, action: action, subject: subject, profile: profile, errors: issues.length, issues: issues });
+        karate.write(JSON.stringify(valReports, null, 2), 'session-validation-reports.json');
+        return id;
+      }
+      """
+    # compact issue list for the X-ZW-Validation-Report response header
+    # (capped + truncated to stay within header size limits; URI-encoded so
+    # diagnostics text can never break the header)
+    * def headerReport =
+      """
+      function(issues) {
+        var compact = [];
+        for (var i = 0; i < issues.length && i < 5; i++) {
+          var m = issues[i].message || '';
+          compact.push({ severity: issues[i].severity, location: issues[i].location,
+                         message: m.length > 200 ? m.substring(0, 200) + '…' : m });
+        }
+        return encodeURIComponent(JSON.stringify(compact));
+      }
+      """
     * def seenPatients = {}
     * def recordPatients =
       """
@@ -48,13 +92,15 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     And param profile = profiles.Bundle
     And request body
     When method post
-    * def verdict = errorCount(response)
-    * karate.log('ZWPROXY|push|order bundle|' + verdict + ' errors')
+    * def issues = extractIssues(response)
+    * def verdict = issues.length
+    * def reportId = recordReport('push', 'order bundle', profiles.Bundle, issues)
+    * karate.log('ZWPROXY|push|order bundle|' + verdict + ' errors|' + reportId)
     # 2) pass it through — the client gets the real server response
     Given url target
     And request body
     When method post
-    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.Bundle)' }
+    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation, X-ZW-Validation-Report', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.Bundle)', 'X-ZW-Validation-Report': '#(headerReport(issues))' }
 
   # ── EHR places a single ServiceRequest ──
   Scenario: methodIs('post') && pathMatches('/ServiceRequest')
@@ -64,13 +110,15 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     And param profile = profiles.ServiceRequest
     And request body
     When method post
-    * def verdict = errorCount(response)
-    * karate.log('ZWPROXY|push|ServiceRequest|' + verdict + ' errors')
+    * def issues = extractIssues(response)
+    * def verdict = issues.length
+    * def reportId = recordReport('push', 'ServiceRequest', profiles.ServiceRequest, issues)
+    * karate.log('ZWPROXY|push|ServiceRequest|' + verdict + ' errors|' + reportId)
     Given url target
     And path 'ServiceRequest'
     And request body
     When method post
-    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.ServiceRequest)' }
+    * def responseHeaders = { 'Access-Control-Expose-Headers': 'X-ZW-Validation, X-ZW-Validation-Report', 'X-ZW-Validation': '#(verdict + " errors vs " + profiles.ServiceRequest)', 'X-ZW-Validation-Report': '#(headerReport(issues))' }
 
   # ── EHR consumes results: must be patient-scoped, then forwarded ──
   Scenario: methodIs('get') && pathMatches('/DiagnosticReport') && (requestParams.subject != null || requestParams.patient != null || requestParams['patient.identifier'] != null)
@@ -81,7 +129,9 @@ Feature: EHR conformance proxy - order placer + results consumer (pass-through)
     When method get
 
   Scenario: methodIs('get') && pathMatches('/DiagnosticReport')
-    * karate.log('ZWPROXY|pull|DiagnosticReport|REJECTED unscoped')
+    * def issues = [{ severity: 'error', location: 'query parameters', message: 'result query must be scoped to a patient (subject or patient parameter)' }]
+    * def reportId = recordReport('pull', 'DiagnosticReport', null, issues)
+    * karate.log('ZWPROXY|pull|DiagnosticReport|REJECTED unscoped|' + reportId)
     * def responseStatus = 400
     * def response = { resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'required', diagnostics: 'result query must be scoped to a patient (subject or patient parameter)' }] }
 

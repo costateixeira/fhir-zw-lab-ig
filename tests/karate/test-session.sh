@@ -24,6 +24,7 @@ TARGET="${TARGET:-http://173.212.195.88/fhir}"
 SESSION="target/sessions/$(date +%Y%m%d-%H%M%S)-${ACTOR}"
 mkdir -p "$SESSION"
 rm -f target/session-patients.txt session-patients.txt
+rm -f target/session-validation-reports.json session-validation-reports.json
 
 LAN_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || hostname -I 2>/dev/null | cut -d' ' -f1 || echo localhost)"
 
@@ -65,11 +66,17 @@ cleanup() {
     printf '%s\n' "$VERDICTS" | awk -F'|' '
       BEGIN { print "["; sep="" }
       { gsub(/"/, "\\\"")
-        printf "%s  {\"time\":\"%s\",\"action\":\"%s\",\"subject\":\"%s\",\"result\":\"%s\"}", sep, $1, $2, $3, $4
+        printf "%s  {\"time\":\"%s\",\"action\":\"%s\",\"subject\":\"%s\",\"result\":\"%s\",\"report\":\"%s\"}", sep, $1, $2, $3, $4, $5
         sep=",\n" }
       END { print "\n]" }' > "$SESSION/verdicts.json"
     echo "  (saved as JSON: $SESSION/verdicts.json)"
   fi
+
+  # full per-request validation error reports written by the proxy; the ids
+  # in here match the trailing field of the ZWPROXY log lines
+  for f in target/session-validation-reports.json session-validation-reports.json; do
+    [ -s "$f" ] && cp "$f" "$SESSION/validation-reports.json" && break
+  done
 
   PATIENTS_FILE=""
   for f in target/session-patients.txt session-patients.txt; do
@@ -113,6 +120,13 @@ cleanup() {
  tr.ok td.result{color:#15803d;font-weight:600}
  tr.bad td.result{color:#b91c1c;font-weight:600}
  tr.fwd td.result{color:#777}
+ tr.click{cursor:pointer} tr.click:hover td{background:#f1f5f9}
+ tr.detail td{background:#fbfbfd;font-size:.85rem;color:#333}
+ .issue{border-left:3px solid #b91c1c;padding:.15rem .6rem;margin:.3rem 0}
+ .issue b{text-transform:uppercase;font-size:.7rem;color:#b91c1c;margin-right:.4rem}
+ .issue code{background:#f3f4f6;padding:0 .35rem;border-radius:4px;font-size:.78rem}
+ .issue .msg{margin-top:.1rem}
+ .prof{color:#888;font-size:.75rem;margin-top:.4rem}
  iframe{width:100%;height:78vh;border:1px solid #ddd;background:#fff}
  a{color:#2563eb} .note{font-size:.85rem;color:#666}
 </style></head><body>
@@ -126,9 +140,9 @@ HTML
       printf '%s\n' "$VERDICTS" | awk -F'|' '{
         gsub(/&/, "\\&amp;"); gsub(/</, "\\&lt;")
         cls = ($4 ~ /^0 errors/ || $4 ~ /^ok/) ? "ok" : ($4 ~ /forwarded/) ? "fwd" : "bad"
-        printf "<tr class=%s><td>%s</td><td>%s</td><td>%s</td><td class=result>%s</td></tr>\n", cls, $1, $2, $3, $4 }'
+        printf "<tr class=%s data-report=\"%s\"><td>%s</td><td>%s</td><td>%s</td><td class=result>%s</td></tr>\n", cls, $5, $1, $2, $3, $4 }'
       echo "</table>"
-      echo "<p class=note>also saved as verdicts.json in this folder</p>"
+      echo "<p class=note>click a validated request for its full error report &middot; also saved as verdicts.json + validation-reports.json in this folder</p>"
       echo "</div><div class=pane-right>"
       echo "<h2>Stored-data audit — what ended up on the server</h2>"
       if [ -f "$SESSION/audit-report/karate-summary.html" ]; then
@@ -136,7 +150,47 @@ HTML
       else
         echo '<p class=note>no audit ran (no patient identifiers seen in pushes)</p>'
       fi
-      echo "</div></div></body></html>"
+      echo "</div></div>"
+      # per-request error reports: clicking a verdict row expands the issues
+      # the proxy's \$validate hop found for that exact request
+      echo "<script>const REPORTS = $(cat "$SESSION/validation-reports.json" 2>/dev/null || echo '[]');</script>"
+      cat <<'HTML'
+<script>
+const byId = {};
+(Array.isArray(REPORTS) ? REPORTS : []).forEach(r => { byId[r.id] = r; });
+document.querySelectorAll('tr[data-report]').forEach(tr => {
+  const r = byId[tr.dataset.report];
+  if (!r) return;
+  tr.classList.add('click');
+  tr.title = 'click for the full error report';
+  tr.addEventListener('click', () => {
+    const next = tr.nextElementSibling;
+    if (next && next.classList.contains('detail')) { next.remove(); return; }
+    const d = document.createElement('tr'); d.className = 'detail';
+    const td = document.createElement('td'); td.colSpan = 4;
+    if (!r.issues || !r.issues.length) {
+      td.textContent = 'no conformance findings';
+    } else {
+      r.issues.forEach(i => {
+        const div = document.createElement('div'); div.className = 'issue';
+        const sev = document.createElement('b'); sev.textContent = i.severity || 'error';
+        const loc = document.createElement('code'); loc.textContent = i.location || '(bundle)';
+        const msg = document.createElement('div'); msg.className = 'msg'; msg.textContent = i.message || '';
+        div.append(sev, loc, msg);
+        td.appendChild(div);
+      });
+    }
+    if (r.profile) {
+      const p = document.createElement('div'); p.className = 'prof';
+      p.textContent = 'validated against ' + r.profile;
+      td.appendChild(p);
+    }
+    d.appendChild(td); tr.after(d);
+  });
+});
+</script>
+HTML
+      echo "</body></html>"
     } > "$SESSION/verdicts.html"
     echo "browser dashboard: $(pwd)/$SESSION/verdicts.html"
     command -v open >/dev/null 2>&1 && open "$SESSION/verdicts.html"
