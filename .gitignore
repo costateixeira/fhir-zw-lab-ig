@@ -47,5 +47,3 @@ auto-save-list
 tramp
 .\#*
 .swp
-tests/karate/karate-*.jar
-tests/karate/target/

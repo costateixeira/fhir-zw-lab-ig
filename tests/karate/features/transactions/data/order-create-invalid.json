@@ -1,8 +1,0 @@
-{
-  "resourceType": "ServiceRequest",
-  "status": "PLACEHOLDER-invalid-status-value",
-  "intent": "order",
-  "subject": {
-    "reference": "Patient/PLACEHOLDER"
-  }
-}
