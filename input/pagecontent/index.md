@@ -29,13 +29,16 @@ This first iteration includes:
 
 - **Logical models:** `ZWLabOrder` (ZW.LAB.A1) and `ZWLabResultReport` (ZW.LAB.A2) derived from the Zimbabwe Lab DAK data dictionary.
 - **Profiles:** `ZWLabPatient`, `ZWLabTask`, `ZWLabServiceRequest`, `ZWSpecimen`, `ZWLaboratory`, `ZWFacility`, `ZWLabDiagnosticReport`, `ZWLabResultObservation`.
+- **Exchange bundles:** `ZWLabOrderBundle` (order transaction) and `ZWLabReportBundle` (signed-off result report document with `ZWLabReportComposition`).
+- **Actors and requirements:** the six [workflow actors](actors.html) (Lab Order Placer/Repository/Fulfiller, Lab Result Provider/Repository/Consumer) and per-transaction Requirements.
 - **Extensions:** `DateOfBirthEstimated`, `ReportReviewState`.
 - **Terminology:** National code systems and value sets for tests, sample types, reasons for test, rejection reasons, report review states, and the national laboratory list.
 - **Examples:** End-to-end Viral Load Plasma order and result scenario.
+- **Testing:** a Gherkin/Karate [actor conformance test kit](testing.html) exercising the workflow transactions.
 
 ### Out of Scope (Iteration 1)
 
-CapabilityStatements, Composition/document Bundle, ConceptMaps, Questionnaires, decision-support logic, indicator measures, ICD-11/LOINC/SNOMED terminologist mappings.
+CapabilityStatements, ConceptMaps, Questionnaires, decision-support logic, indicator measures, ICD-11/LOINC/SNOMED terminologist mappings.
 
 ### Relationship to Other Guides
 

@@ -119,6 +119,33 @@ Usage: #example
 * authoredOn = "2024-03-15T08:00:00+02:00"
 
 
+// ─── Order Transaction Bundle (order push from Impilo → OpenHIM/SHR) ─────────
+
+Instance: example-zw-lab-order-bundle
+InstanceOf: ZWLabOrderBundle
+Title: "Example — Viral Load Order Transaction Bundle"
+Description: "Transaction Bundle submitted by the Lab Order Placer (Impilo EHR) to the Lab Order Repository (SHR): order Task, ServiceRequest, Patient and Specimen (step 1 of the HIE transaction flow)."
+Usage: #example
+* type = #transaction
+* entry[task].fullUrl = "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0001"
+* entry[task].resource = example-zw-lab-task-order
+* entry[task].request.method = #POST
+* entry[task].request.url = "Task"
+* entry[serviceRequest].fullUrl = "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0002"
+* entry[serviceRequest].resource = example-zw-service-request-vl
+* entry[serviceRequest].request.method = #POST
+* entry[serviceRequest].request.url = "ServiceRequest"
+* entry[patient].fullUrl = "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0003"
+* entry[patient].resource = example-zw-lab-patient
+* entry[patient].request.method = #POST
+* entry[patient].request.url = "Patient"
+* entry[patient].request.ifNoneExist = "identifier=http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id|EHR-ZW-00123"
+* entry[specimen][+].fullUrl = "urn:uuid:5a3952e2-1c1a-4a6b-9c5d-0b6e9a3e0004"
+* entry[specimen][=].resource = example-zw-specimen-plasma
+* entry[specimen][=].request.method = #POST
+* entry[specimen][=].request.url = "Specimen"
+
+
 // ─── Observation (result from LIMS) ──────────────────────────────────────────
 
 Instance: example-zw-vl-observation
@@ -171,3 +198,54 @@ Usage: #example
 * performer[+] = Reference(example-national-virology-lab)
 * resultsInterpreter[+] = Reference(example-national-virology-lab)
 * result[+] = Reference(example-zw-vl-observation)
+
+
+// ─── Composition (signed-off report document header) ────────────────────────
+
+Instance: example-zw-vl-composition
+InstanceOf: ZWLabReportComposition
+Title: "Example — Viral Load Report Composition"
+Description: "Composition for the signed-off Viral Load report document. The legal attester records the laboratory sign-off."
+Usage: #inline
+* status = #final
+* type = $LNC#11502-2 "Laboratory report"
+* subject = Reference(example-zw-lab-patient)
+* date = "2024-03-18T16:30:00+02:00"
+* author[+] = Reference(example-national-virology-lab)
+* title = "Laboratory Result Report — Viral Load Plasma"
+* custodian = Reference(example-national-virology-lab)
+* attester[legalAttester].mode = #legal
+* attester[legalAttester].time = "2024-03-18T16:30:00+02:00"
+* attester[legalAttester].party = Reference(example-national-virology-lab)
+* section[labResults].title = "Laboratory Results"
+* section[labResults].code = $LNC#30954-2 "Relevant diagnostic tests/laboratory data note"
+* section[labResults].entry[+] = Reference(example-zw-vl-diagnostic-report)
+
+
+// ─── Document Bundle (signed-off snapshot pushed to the SHR) ─────────────────
+
+Instance: example-zw-vl-report-bundle
+InstanceOf: ZWLabReportBundle
+Title: "Example — Viral Load Report Document Bundle"
+Description: "Signed-off snapshot document of the Viral Load Plasma result, assembled by the LIMS for exchange via OpenHIM/SHR."
+Usage: #example
+* identifier.system = "http://mohcc.gov.zw/fhir/lab/identifier/report-document"
+* identifier.value = "ZW-LABDOC-2024-00456"
+* type = #document
+* timestamp = "2024-03-18T16:35:00+02:00"
+* entry[composition].fullUrl = "http://mohcc.gov.zw/fhir/lab/Composition/example-zw-vl-composition"
+* entry[composition].resource = example-zw-vl-composition
+* entry[diagnosticReport][+].fullUrl = "http://mohcc.gov.zw/fhir/lab/DiagnosticReport/example-zw-vl-diagnostic-report"
+* entry[diagnosticReport][=].resource = example-zw-vl-diagnostic-report
+* entry[patient].fullUrl = "http://mohcc.gov.zw/fhir/lab/Patient/example-zw-lab-patient"
+* entry[patient].resource = example-zw-lab-patient
+* entry[observation][+].fullUrl = "http://mohcc.gov.zw/fhir/lab/Observation/example-zw-vl-observation"
+* entry[observation][=].resource = example-zw-vl-observation
+* entry[specimen][+].fullUrl = "http://mohcc.gov.zw/fhir/lab/Specimen/example-zw-specimen-plasma"
+* entry[specimen][=].resource = example-zw-specimen-plasma
+* entry[serviceRequest][+].fullUrl = "http://mohcc.gov.zw/fhir/lab/ServiceRequest/example-zw-service-request-vl"
+* entry[serviceRequest][=].resource = example-zw-service-request-vl
+* entry[organization][+].fullUrl = "http://mohcc.gov.zw/fhir/lab/Organization/example-national-virology-lab"
+* entry[organization][=].resource = example-national-virology-lab
+* entry[location][+].fullUrl = "http://mohcc.gov.zw/fhir/lab/Location/example-order-facility"
+* entry[location][=].resource = example-order-facility
