@@ -85,19 +85,42 @@ Notes:
 
 ## Testing your own system
 
-**Your system plays a client role** (Order Placer, Result Provider, ...):
-point it at the sandbox, let it submit, then audit what arrived:
-
-```bash
-AUDIT_PATIENT_IDENTIFIER='http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id|EHR-ZW-00123' \
-  ./run-tests.sh @auditor
-```
-
 **Your system plays a repository role**: run the repository suites against it:
 
 ```bash
 SHR_URL=https://your-server/fhir ./run-tests.sh @lab-order-repository
 SHR_URL=https://your-server/fhir ./run-tests.sh @lab-result-repository
+```
+
+**Your system plays a client role** (Order Placer, Fulfiller, Result Provider,
+Consumer) — two complementary options:
+
+*Live, per-request: the interceptor.* An actor interceptor **waits** for your
+client. It doesn't reimplement a FHIR server — it sits in front of the real
+one and, per request: a **push** (placing an order / submitting a report) is
+forwarded to the real server's `$validate` against the matching ZW profile, so
+the payload is validated, never stored, and your client gets the
+`OperationOutcome` back; a **pull** (fetching orders / results) is **gated** —
+it must be patient-scoped (`subject` or `patient` param) or it's rejected with
+`400`, and a correct query is forwarded to the repository. Every request is
+logged so you can watch exactly what the client did.
+
+```bash
+./run-interceptor.sh ehr 8080    # tests an EHR (order placer + result consumer)
+./run-interceptor.sh lab 8081    # tests a lab system (order fulfiller + result provider)
+# choose the real server behind the interceptor:
+TARGET=https://my-shr/fhir ./run-interceptor.sh ehr 8080
+```
+
+Point the system under test at `http://localhost:<port>`, drive it through its
+order/result flow, and stop with `Ctrl+C`.
+
+*After the fact: the auditor.* Let your system submit to the real sandbox as
+usual, then validate everything that arrived for the patient:
+
+```bash
+AUDIT_PATIENT_IDENTIFIER='http://mohcc.gov.zw/fhir/lab/identifier/ehr-patient-id|EHR-ZW-00123' \
+  ./run-tests.sh @auditor
 ```
 
 ## Test data

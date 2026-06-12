@@ -42,5 +42,6 @@ Scenarios tagged `@workshop` are intentionally unimplemented placeholders for ha
 
 #### Testing your own system
 
-- **Playing a client role** (Order Placer, Result Provider, ...): point your system at the sandbox, then run the `auditor.feature` with your patient identifier to verify what your system submitted conforms to the IG.
+- **Playing a client role** (Order Placer, Fulfiller, Result Provider, Consumer), live: start an **actor interceptor** (`./run-interceptor.sh ehr 8080` or `lab 8081`) and point your system at it. Pushes are forwarded to the real server's `$validate` (your system receives the OperationOutcome; nothing is stored) and pulls are gated for correct patient scoping, then forwarded.
+- **Playing a client role**, after the fact: let your system submit to the sandbox, then run `auditor.feature` with your patient identifier to validate everything that arrived.
 - **Playing a repository role**: set the base URL to your server (`SHR_URL=https://your-server/fhir ./run-tests.sh`) and run the repository suites against it.
